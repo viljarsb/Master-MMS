@@ -7,11 +7,11 @@ import javax.websocket.DeploymentException;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.concurrent.TimeoutException;
 
 public class Tester
 {
-
-    public static void Main(String[] args) throws DeploymentException, URISyntaxException, IOException
+    public static void Main(String[] args) throws DeploymentException, URISyntaxException, IOException, TimeoutException
     {
         Agent agent = new Agent();
         ArrayList<RouterInfo> routers = (ArrayList<RouterInfo>) agent.discover();

@@ -30,9 +30,11 @@ dependencies {
 
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.1'
 
-// https://mvnrepository.com/artifact/org.eclipse.jetty.websocket/websocket-client
-    implementation 'org.eclipse.jetty.websocket:websocket-client:9.4.51.v20230217'
-
+    implementation 'org.eclipse.jetty.websocket:websocket-api:9.4.43.v20210629'
+    implementation 'org.eclipse.jetty.websocket:websocket-common:9.4.43.v20210629'
+    implementation 'org.eclipse.jetty.websocket:websocket-server:9.4.43.v20210629'
+    implementation 'org.eclipse.jetty.websocket:javax-websocket-server-impl:9.4.43.v20210629'
+    implementation 'javax.websocket:javax.websocket-api:1.1'
 
 }
 

@@ -4,6 +4,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
+import org.eclipse.jetty.websocket.api.Session;
+import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 
@@ -13,10 +15,10 @@ import javax.websocket.*;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.security.KeyManagementException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
 
 public class ConnectionHandler
 {
@@ -43,22 +45,37 @@ public class ConnectionHandler
     }
 
 
-    public void connectAnonymously(String uri) throws URISyntaxException, DeploymentException, IOException
+    public void connectAnonymously(String uri) throws URISyntaxException, DeploymentException, IOException, TimeoutException
     {
         try
         {
             SSLContext tlsContext = TLSContextManager.getTLSContext();
+
             SslContextFactory sslContextFactory = new SslContextFactory.Client(false);
             sslContextFactory.setSslContext(tlsContext);
+
             HttpClient httpClient = new HttpClient(sslContextFactory);
             httpClient.start();
 
-            WebSocketClient client = new WebSocketClient(sslContextFactory);
+            WebSocketClient client = new WebSocketClient(httpClient);
             client.start();
+
             URI destination = new URI(uri);
+
             ClientUpgradeRequest request = new ClientUpgradeRequest();
+            request.setHeader("Sec-WebSocket-Protocol", "MMTP");
+            request.setHeader("Authentication-wanted", "false");
+
             AgentEndpoint agentEndpoint = new AgentEndpoint();
-            client.connect(agentEndpoint, destination, request);
+            Future<Session> sessionFuture = client.connect(agentEndpoint, destination, request);
+
+            session = sessionFuture.get(5, TimeUnit.SECONDS);
+        }
+
+        catch (TimeoutException ex)
+        {
+            logger.error("Connection request timed out: " + uri);
+            throw ex;
         }
 
         catch (URISyntaxException ex)
@@ -78,6 +95,7 @@ public class ConnectionHandler
             logger.error("Connection request failed, IO exception: " + uri);
             throw ex;
         }
+
         catch (Exception e)
         {
             throw new RuntimeException(e);
@@ -85,60 +103,18 @@ public class ConnectionHandler
     }
 
 
-    public void connectAuthenticated(String uri) throws URISyntaxException, DeploymentException, IOException
+    public void connectAuthenticated(String uri)
     {
-        try
-        {
 
-            SSLContext tlsContext = TLSContextManager.getTLSContext();
-            SslEngineConfigurator sslEngineConfigurator = new SslEngineConfigurator(tlsContext, true, true, true);
-            clientManager.getProperties().put(ClientProperties.SSL_ENGINE_CONFIGURATOR, sslEngineConfigurator);
-            session = clientManager.connectToServer(AgentEndpoint.class, new URI(uri));
-        }
-
-        catch (URISyntaxException ex)
-        {
-            logger.error("Connection request failed, invalid URI: " + uri);
-            throw ex;
-        }
-
-        catch (DeploymentException ex)
-        {
-            logger.error("Connection request failed, deployment exception: " + uri);
-            throw ex;
-        }
-
-        catch (IOException ex)
-        {
-            logger.error("Connection request failed, IO exception: " + uri);
-            throw ex;
-        }
-        catch (CertificateException e)
-        {
-            throw new RuntimeException(e);
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new RuntimeException(e);
-        }
-        catch (KeyStoreException e)
-        {
-            throw new RuntimeException(e);
-        }
-        catch (KeyManagementException e)
-        {
-            throw new RuntimeException(e);
-        }
     }
 
-    public void disconnect() throws IOException, IllegalStateException
+
+    public void disconnect() throws IllegalStateException
     {
-        if(session == null)
+        if (session == null)
             throw new IllegalStateException("No session to disconnect");
 
-        session.close(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Disconnecting"));
+        session.close(StatusCode.NORMAL, "Agent disconnected");
         session = null;
     }
-
-
 }

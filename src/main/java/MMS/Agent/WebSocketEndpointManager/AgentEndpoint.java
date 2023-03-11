@@ -4,39 +4,50 @@ import MMS.EncoderDecoder.MMTPDecoder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.websocket.api.Session;
-import org.eclipse.jetty.websocket.api.annotations.*;
+import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 
 
-@WebSocket
-public class AgentEndpoint
+public class AgentEndpoint extends WebSocketAdapter
 {
     private static final Logger logger = LogManager.getLogger(AgentEndpoint.class);
 
 
-    @OnWebSocketConnect
-    public void onOpen(Session session)
+    @Override
+    public void onWebSocketConnect(Session session)
     {
-        logger.info("New connection: " + session.getRemoteAddress().getAddress().getHostAddress());
+        super.onWebSocketConnect(session);
+        logger.info("Socket Connected: " + session);
     }
 
 
-    @OnWebSocketMessage
-    public void onMessage(String message)
+    @Override
+    public void onWebSocketText(String message)
     {
-        logger.info("Message received: " + message);
+        super.onWebSocketText(message);
+        logger.info("Received TEXT message: " + message);
     }
 
 
-    @OnWebSocketClose
-    public void onClose(int statusCode, String reason)
+    @Override
+    public void onWebSocketBinary(byte[] payload, int offset, int len)
     {
-        logger.info("Connection closed: " + statusCode + " reason: " + reason);
+        super.onWebSocketBinary(payload, offset, len);
+        logger.info("Received BINARY message: " + new String(payload, offset, len));
     }
 
 
-    @OnWebSocketError
-    public void onError(Session session, Throwable throwable)
+    @Override
+    public void onWebSocketClose(int statusCode, String reason)
     {
-        logger.error("Error: " + throwable.getMessage());
+        super.onWebSocketClose(statusCode, reason);
+        logger.info("Socket Closed: [" + statusCode + "] " + reason);
+    }
+
+
+    @Override
+    public void onWebSocketError(Throwable cause)
+    {
+        super.onWebSocketError(cause);
+        logger.error("Socket Error: " + cause.getMessage(), cause);
     }
 }

@@ -7,6 +7,7 @@ import org.apache.logging.log4j.Logger;
 import javax.websocket.DeploymentException;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.concurrent.TimeoutException;
 
 
 public class WebSocketEndpointManager
@@ -34,7 +35,7 @@ public class WebSocketEndpointManager
     }
 
 
-    public void connectAnonymously(RouterInfo routerInfo) throws DeploymentException, URISyntaxException, IOException
+    public void connectAnonymously(RouterInfo routerInfo) throws DeploymentException, URISyntaxException, IOException, TimeoutException
     {
            this.connectionHandler.connectAnonymously(routerInfo.getUri());
     }

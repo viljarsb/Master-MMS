@@ -11,6 +11,7 @@ import javax.websocket.DeploymentException;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 
 public class Agent
@@ -29,7 +30,7 @@ public class Agent
     }
 
 
-    public void connectAnonymously(RouterInfo routerInfo) throws DeploymentException, URISyntaxException, IOException
+    public void connectAnonymously(RouterInfo routerInfo) throws DeploymentException, URISyntaxException, IOException, TimeoutException
     {
         webSocketEndpointManager.connectAnonymously(routerInfo);
     }
