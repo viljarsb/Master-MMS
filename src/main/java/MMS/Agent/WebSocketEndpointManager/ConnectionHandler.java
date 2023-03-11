@@ -45,14 +45,15 @@ public class ConnectionHandler
     }
 
 
+
     public void connectAnonymously(String uri) throws URISyntaxException, DeploymentException, IOException, TimeoutException
     {
         try
         {
             SSLContext tlsContext = TLSContextManager.getTLSContext();
 
-            SslContextFactory sslContextFactory = new SslContextFactory.Client(false);
-            sslContextFactory.setSslContext(tlsContext);
+            SslContextFactory sslContextFactory = new SslContextFactory.Client(true); // only for testing
+            //sslContextFactory.setSslContext(tlsContext);
 
             HttpClient httpClient = new HttpClient(sslContextFactory);
             httpClient.start();
@@ -105,7 +106,7 @@ public class ConnectionHandler
 
     public void connectAuthenticated(String uri)
     {
-
+       throw new UnsupportedOperationException("Not implemented yet");
     }
 
 

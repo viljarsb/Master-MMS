@@ -6,12 +6,12 @@ import java.util.Map;
 
 public class ServiceRegistry
 {
-    private HashMap<String, ServiceInfo> serviceInfoMap;
+    private final HashMap<String, ServiceInfo> serviceInfoMap;
 
 
-    public ServiceRegistry()
+    ServiceRegistry()
     {
-        this.serviceInfoMap = new HashMap<String, ServiceInfo>();
+        this.serviceInfoMap = new HashMap<>();
     }
 
 
@@ -35,7 +35,7 @@ public class ServiceRegistry
 
     Map<String, ServiceInfo> getServiceInfoMap()
     {
-        return new HashMap<String, ServiceInfo>(this.serviceInfoMap);
+        return new HashMap<>(this.serviceInfoMap);
     }
 
 

@@ -1,54 +1,113 @@
 package MMS.EdgeRouter.RouterWebSocketManager;
 
-import MMS.Agent.WebSocketEndpointManager.TLSContextManager;
+import MMS.EdgeRouter.Configuration.Config;
+import MMS.EdgeRouter.Configuration.TLSContextManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import javax.net.ssl.SSLContext;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.server.handler.ContextHandler;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
+import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.eclipse.jetty.websocket.server.WebSocketHandler;
+import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
 
 import java.io.IOException;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
-import java.util.ArrayList;
+import java.util.HashMap;
 
 
 public class DeploymetHandler
 {
+    private static final Logger logger = LogManager.getLogger(DeploymetHandler.class);
+    private static final HashMap<Integer, Server> deployedEndpoints = new HashMap<>();
 
 
-/**    private static final Logger logger = LogManager.getLogger(DeploymetHandler.class);
-
-    public void deployEndpoint(String endpointUrl, int endpointPort, String endpointPath) throws CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException
+    public void deployEndpoint(int endpointPort, String endpointPath, Integer endpointMaxConnections) throws CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException, UnrecoverableKeyException
     {
-        String serverUrl = "wss://" + endpointUrl + ":" + endpointPort + endpointPath;
-        SSLContext tlsContext = TLSContextManager.getTLSContext();
-        Server server = new Server(endpointUrl, endpointPort, endpointPath, null, EdgeRouterEndpoint.class);
+        Server server;
 
+        if (endpointMaxConnections != null)
+        {
+            server = new Server(new QueuedThreadPool(endpointMaxConnections));
+        }
+
+        else
+        {
+            server = new Server();
+        }
+
+        SslContextFactory.Server sslContextFactory = new SslContextFactory.Server(); // only for testing
+        sslContextFactory.setSslContext(TLSContextManager.getTLSContext());
+        sslContextFactory.setWantClientAuth(true);
+
+        ServerConnector tlsConnector = new ServerConnector(server, sslContextFactory);
+        tlsConnector.setPort(endpointPort);
+
+        server.addConnector(tlsConnector);
+
+        ContextHandler context = new ContextHandler();
+        context.setContextPath(endpointPath);
+
+        WebSocketHandler handler = new WebSocketHandler()
+        {
+            @Override
+            public void configure(WebSocketServletFactory factory)
+            {
+                factory.register(EdgeRouterEndpoint.class);
+                factory.getPolicy().setIdleTimeout(600000);
+            }
+        };
+
+        server.setHandler(handler);
 
         try
         {
             server.start();
-            logger.info("Endpoint deployed: " + serverUrl);
-            endpoints.add(server);
+            deployedEndpoints.put(endpointPort, server);
         }
 
-        catch (Exception ex)
+        catch (Exception e)
         {
-            logger.info("Endpoint deployment failed: " + serverUrl);
-            throw new RuntimeException(ex);
+            throw new RuntimeException(e);
         }
     }
 
 
-    public void undeployEndpoints()
+    public void undeployEndpoint(int endpointPort)
     {
-        for (Server server : endpoints)
+        Server server = deployedEndpoints.get(endpointPort);
+        try
         {
             server.stop();
-            logger.info("Endpoint undeployed");
+            deployedEndpoints.remove(endpointPort);
         }
-        endpoints.clear();
-    } */
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+
+    public void undeployAllEndpoints()
+    {
+        for (Server server : deployedEndpoints.values())
+        {
+            try
+            {
+                server.stop();
+            }
+            catch (Exception e)
+            {
+                throw new RuntimeException(e);
+            }
+        }
+        deployedEndpoints.clear();
+    }
+
+
 }

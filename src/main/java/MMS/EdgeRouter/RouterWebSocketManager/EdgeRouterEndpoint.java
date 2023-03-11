@@ -1,59 +1,95 @@
 package MMS.EdgeRouter.RouterWebSocketManager;
 
-import MMS.EncoderDecoder.MMTPDecoder;
-import MMS.EncoderDecoder.MMTPEncoder;
+import net.maritimeconnectivity.pki.CertificateHandler;
+import net.maritimeconnectivity.pki.PKIIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.eclipse.jetty.websocket.api.Session;
+import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 
-import javax.websocket.*;
-import javax.websocket.server.ServerEndpoint;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
+import javax.servlet.http.HttpServletRequest;
+import java.security.cert.X509Certificate;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-@ServerEndpoint(value = "/edge-router", encoders = {MMTPEncoder.class}, decoders = {MMTPDecoder.class})
-public class EdgeRouterEndpoint
+
+public class EdgeRouterEndpoint extends WebSocketAdapter
 {
     private static final Logger logger = LogManager.getLogger(EdgeRouterEndpoint.class);
-    private final PingHandler pingManager;
+    private final ConcurrentHashMap<String, SessionState> sessionState;
+
 
     public EdgeRouterEndpoint()
     {
-        this.pingManager = new PingHandler();
+        this.sessionState = new ConcurrentHashMap<>();
     }
 
 
-    @OnOpen
-    public void onOpen(Session session)
+    @Override
+    public void onWebSocketConnect(Session session)
     {
-        pingManager.addConnection(session);
-        logger.info("New connection: " + session.getId());
+        super.onWebSocketConnect(session);
+
+        HttpServletRequest request = (HttpServletRequest) session.getUpgradeRequest();
+        SSLSession sslSession = (SSLSession) request.getAttribute("javax.servlet.request.ssl_session");
+
+        UUID uuid = UUID.randomUUID();
+
+        try
+        {
+            if (sslSession != null && sslSession.getPeerCertificates() != null && sslSession.getPeerCertificates().length > 0)
+            {
+                X509Certificate cert = (X509Certificate) sslSession.getPeerCertificates()[0];
+                PKIIdentity identity = CertificateHandler.getIdentityFromCert(cert);
+                logger.info("Connected to: \" + session.getRemoteAddress().getAddress().\nClient authenticated as: " + identity.getFirstName(), identity.getLastName(), identity.getCountry(), identity.getMrn());
+                sessionState.put(uuid.toString(), new SessionState(session, true));
+            }
+
+            else
+            {
+                logger.info("Connected to: \" + session.getRemoteAddress().getAddress().\nClient did not authenticate, connection will continue in anonymous mode.");
+                sessionState.put(uuid.toString(), new SessionState(session, false));
+            }
+        }
+
+        catch (SSLPeerUnverifiedException e)
+        {
+            logger.error("An error occurred while performing TLS handshake during client connection from: " + session.getRemoteAddress().getAddress(), e);
+            throw new RuntimeException(e);
+        }
     }
 
 
-    @OnMessage
-    public void onMessage(Session session, String message)
+    @Override
+    public void onWebSocketText(String message)
     {
-
+        super.onWebSocketText(message);
+        logger.info("Received message: " + message);
     }
 
 
-    @OnClose
-    public void onClose(Session session, CloseReason closeReason)
+    @Override
+    public void onWebSocketClose(int statusCode, String reason)
     {
-        pingManager.removeConnection(session);
-        logger.info("Connection closed: " + session.getId() + " reason: " + closeReason.getReasonPhrase());
+        super.onWebSocketClose(statusCode, reason);
+        logger.info("Connection closed: " + statusCode + " " + reason);
     }
 
 
-    @OnError
-    public void onError(Session session, Throwable t)
+    @Override
+    public void onWebSocketError(Throwable cause)
     {
-
+        super.onWebSocketError(cause);
+        logger.error("Connection error: " + cause.getMessage());
     }
 
 
-    @OnMessage
-    public void onMessage(Session session, PongMessage pongMessage)
+    @Override
+    public void onWebSocketBinary(byte[] payload, int offset, int len)
     {
-        pingManager.registerPong(session);
-        logger.debug("Pong received from " + session.getId());
+        super.onWebSocketBinary(payload, offset, len);
+        logger.info("Received binary message");
     }
 }

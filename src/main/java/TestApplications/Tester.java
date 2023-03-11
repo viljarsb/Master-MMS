@@ -11,7 +11,7 @@ import java.util.concurrent.TimeoutException;
 
 public class Tester
 {
-    public static void Main(String[] args) throws DeploymentException, URISyntaxException, IOException, TimeoutException
+    public static void main(String[] args) throws DeploymentException, URISyntaxException, IOException, TimeoutException
     {
         Agent agent = new Agent();
         ArrayList<RouterInfo> routers = (ArrayList<RouterInfo>) agent.discover();

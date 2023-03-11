@@ -28,6 +28,7 @@ public class TLSContextManager
         return sslContext;
     }
 
+
     public static SSLContext getTLSContextWithClientAuth() throws NoSuchAlgorithmException, CertificateException, IOException, KeyStoreException, KeyManagementException, UnrecoverableKeyException
     {
         SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
@@ -37,12 +38,14 @@ public class TLSContextManager
         return sslContext;
     }
 
+
     private static KeyStore getKeystore() throws CertificateException, IOException, NoSuchAlgorithmException, KeyStoreException
     {
         KeyStore keyStore = KeyStore.getInstance("PKCS12");
         keyStore.load(null, null);
         return keyStore;
     }
+
 
     private static KeyStore getTrustStore() throws CertificateException, IOException, NoSuchAlgorithmException, KeyStoreException
     {
@@ -51,6 +54,7 @@ public class TLSContextManager
         return trustStore;
     }
 
+
     private static TrustManager[] getTrustManagers() throws CertificateException, IOException, NoSuchAlgorithmException, KeyStoreException
     {
         KeyStore trustStore = getTrustStore();
@@ -58,6 +62,7 @@ public class TLSContextManager
         trustManagerFactory.init(trustStore);
         return trustManagerFactory.getTrustManagers();
     }
+
 
     private static KeyManager[] getKeyManagers() throws CertificateException, IOException, NoSuchAlgorithmException, KeyStoreException, UnrecoverableKeyException
     {
