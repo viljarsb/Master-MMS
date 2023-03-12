@@ -1,6 +1,5 @@
-package MMS.EdgeRouter.RouterWebSocketManager;
+package MMS.EdgeRouter.WebSocketManager;
 
-import MMS.EdgeRouter.Configuration.Config;
 import MMS.EdgeRouter.Configuration.TLSContextManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -18,17 +17,20 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
-import java.util.HashMap;
 
 
-public class DeploymetHandler
+public class DeploymentHandler
 {
-    private static final Logger logger = LogManager.getLogger(DeploymetHandler.class);
-    private static final HashMap<Integer, Server> deployedEndpoints = new HashMap<>();
-
+    private static final Logger logger = LogManager.getLogger(DeploymentHandler.class);
+    private static Server currentServer;
 
     public void deployEndpoint(int endpointPort, String endpointPath, Integer endpointMaxConnections) throws CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException, UnrecoverableKeyException
     {
+        if(currentServer != null)
+        {
+            throw new IllegalStateException("Endpoint already deployed");
+        }
+
         Server server;
 
         if (endpointMaxConnections != null)
@@ -68,7 +70,7 @@ public class DeploymetHandler
         try
         {
             server.start();
-            deployedEndpoints.put(endpointPort, server);
+            currentServer = server;
         }
 
         catch (Exception e)
@@ -78,36 +80,14 @@ public class DeploymetHandler
     }
 
 
-    public void undeployEndpoint(int endpointPort)
+    public void undeployEndpoint() throws Exception
     {
-        Server server = deployedEndpoints.get(endpointPort);
-        try
+        if(currentServer == null)
         {
-            server.stop();
-            deployedEndpoints.remove(endpointPort);
+            throw new IllegalStateException("Endpoint not deployed");
         }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
+
+        currentServer.stop();
+        currentServer = null;
     }
-
-
-    public void undeployAllEndpoints()
-    {
-        for (Server server : deployedEndpoints.values())
-        {
-            try
-            {
-                server.stop();
-            }
-            catch (Exception e)
-            {
-                throw new RuntimeException(e);
-            }
-        }
-        deployedEndpoints.clear();
-    }
-
-
 }

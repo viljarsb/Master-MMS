@@ -1,6 +1,5 @@
 package MMS.EdgeRouter;
 
-import MMS.EdgeRouter.RouterWebSocketManager.DeploymetHandler;
 import MMS.EdgeRouter.ServiceBroadcastManager.ServiceBroadcastManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -18,7 +17,7 @@ public class EdgeRouter
         ServiceBroadcastManager serviceBroadcastManager = new ServiceBroadcastManager();
         serviceBroadcastManager.broadcastService("hei", 10, "test");
 
-      //  DeploymetHandler deploymetHandler = new DeploymetHandler();
+      //  DeploymentHandler deploymetHandler = new DeploymentHandler();
       //  deploymetHandler.deployEndpoint(8080, "/test", 10);
 
         try

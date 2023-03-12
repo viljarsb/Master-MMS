@@ -1,4 +1,4 @@
-package MMS.EdgeRouter.RouterWebSocketManager;
+package MMS.EdgeRouter.WebSocketManager;
 
 import org.eclipse.jetty.websocket.api.Session;
 
