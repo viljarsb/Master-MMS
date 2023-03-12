@@ -1,17 +1,11 @@
 package MMS.EdgeRouter.WebSocketManager;
 
-import net.maritimeconnectivity.pki.CertificateHandler;
 import net.maritimeconnectivity.pki.PKIIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 
-import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.net.ssl.SSLSession;
-import javax.servlet.http.HttpServletRequest;
-import java.security.cert.X509Certificate;
 import java.util.UUID;
 
 
@@ -19,12 +13,14 @@ public class EdgeRouterEndpoint extends WebSocketAdapter
 {
     private static final Logger logger = LogManager.getLogger(EdgeRouterEndpoint.class);
     private Session session;
-    private final String uuid;
+    private UUID uuid;
+    private ConnectionHandler connectionHandler;
 
-    public EdgeRouterEndpoint(Server server)
+    public EdgeRouterEndpoint()
     {
         super();
-        this.uuid = String.valueOf(UUID.randomUUID());
+        this.connectionHandler = ConnectionHandler.getHandler();
+        this.uuid = UUID.randomUUID();
     }
 
 
@@ -32,33 +28,40 @@ public class EdgeRouterEndpoint extends WebSocketAdapter
     public void onWebSocketConnect(Session session)
     {
         super.onWebSocketConnect(session);
+        this.session = session;
+        connectionHandler.registerClient(session);
 
-        HttpServletRequest request = (HttpServletRequest) session.getUpgradeRequest();
-        SSLSession sslSession = (SSLSession) request.getAttribute("javax.servlet.request.ssl_session");
+        SessionState state = connectionHandler.getClientState(session);
 
-        try
+        if(state.isAuthenticated())
         {
-            if (sslSession != null && sslSession.getPeerCertificates() != null && sslSession.getPeerCertificates().length > 0)
-            {
-                X509Certificate cert = (X509Certificate) sslSession.getPeerCertificates()[0];
-                PKIIdentity identity = CertificateHandler.getIdentityFromCert(cert);
-                logger.info("Connected to: \" + session.getRemoteAddress().getAddress().\nClient authenticated as: " + identity.getFirstName(), identity.getLastName(), identity.getCountry(), identity.getMrn());
-                ConnectionHandler.getHandler().addSession(uuid, new SessionState(session, true));
-            }
+            PKIIdentity identity = state.getIdentity();
+            String remoteAddress = session.getRemoteAddress().toString();
+            String fName = identity.getFirstName();
+            String lName = identity.getLastName();
+            String cn = identity.getCn();
+            String mrn = identity.getMrn();
 
-            else
-            {
-                logger.info("Connected to: \" + session.getRemoteAddress().getAddress().\nClient did not authenticate, connection will continue in anonymous mode.");
-                ConnectionHandler.getHandler().addSession(uuid, new SessionState(session, false));
-            }
+            String logMessage = String.format(
+                    "Connection established for authenticated user:\n"
+                            + "First Name: %s,\n"
+                            + "Last Name: %s,\n"
+                            + "Common Name: %s,\n"
+                            + "MRN: %s,\n"
+                            + "Remote Address: %s",
+                    fName, lName, cn, mrn, remoteAddress);
 
-            this.session = session;
+            logger.info(logMessage);
         }
 
-        catch (SSLPeerUnverifiedException e)
+        else
         {
-            logger.error("An error occurred while performing TLS handshake during client connection from: " + session.getRemoteAddress().getAddress(), e);
-            throw new RuntimeException(e);
+            String remoteAddress = session.getRemoteAddress().toString();
+            String logMessage = String.format(
+                    "Connection established for unauthenticated user:\n"
+                            + "Remote Address: %s",
+                    remoteAddress);
+            logger.info(logMessage);
         }
     }
 
@@ -83,7 +86,6 @@ public class EdgeRouterEndpoint extends WebSocketAdapter
     public void onWebSocketClose(int statusCode, String reason)
     {
         super.onWebSocketClose(statusCode, reason);
-        ConnectionHandler.getHandler().removeSession(uuid);
         logger.info("Connection closed: " + statusCode + " " + reason);
     }
 
@@ -92,7 +94,6 @@ public class EdgeRouterEndpoint extends WebSocketAdapter
     public void onWebSocketError(Throwable cause)
     {
         super.onWebSocketError(cause);
-        ConnectionHandler.getHandler().removeSession(uuid);
         logger.error("Connection error: " + cause.getMessage());
     }
 

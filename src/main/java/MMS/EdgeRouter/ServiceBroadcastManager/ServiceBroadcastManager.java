@@ -14,9 +14,10 @@ public class ServiceBroadcastManager
 
     private final ServiceRegistry serviceRegistry;
     private final BroadcastService broadcastService;
+    private static ServiceBroadcastManager instance;
 
 
-    public ServiceBroadcastManager()
+    private ServiceBroadcastManager()
     {
         try
         {
@@ -32,6 +33,16 @@ public class ServiceBroadcastManager
         }
     }
 
+
+public static ServiceBroadcastManager getManager()
+    {
+        if (instance == null)
+        {
+            instance = new ServiceBroadcastManager();
+        }
+
+        return instance;
+    }
 
     public void broadcastService(String serviceName, int servicePort, String path) throws IOException
     {

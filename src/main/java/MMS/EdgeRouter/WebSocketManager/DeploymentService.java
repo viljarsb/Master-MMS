@@ -12,25 +12,41 @@ import org.eclipse.jetty.websocket.server.WebSocketHandler;
 import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
 
 import java.io.IOException;
+import java.net.URI;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.util.HashMap;
 
 
-public class DeploymentHandler
+public class DeploymentService
 {
-    private static final Logger logger = LogManager.getLogger(DeploymentHandler.class);
-    private static Server currentServer;
+    private static final Logger logger = LogManager.getLogger(DeploymentService.class);
+    private static DeploymentService instance;
+    private final HashMap<URI, Server> deployedEndpoints;
+    private final ConnectionHandler connectionHandler;
+
+    private DeploymentService()
+    {
+        this.deployedEndpoints = new HashMap<>();
+        this.connectionHandler = ConnectionHandler.getHandler();
+    }
+
+    public static DeploymentService getService()
+    {
+        if(instance == null)
+        {
+            instance = new DeploymentService();
+        }
+
+        return instance;
+    }
+
 
     public void deployEndpoint(int endpointPort, String endpointPath, Integer endpointMaxConnections) throws CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException, UnrecoverableKeyException
     {
-        if(currentServer != null)
-        {
-            throw new IllegalStateException("Endpoint already deployed");
-        }
-
         Server server;
 
         if (endpointMaxConnections != null)
@@ -65,12 +81,21 @@ public class DeploymentHandler
             }
         };
 
+        handler.setHandler(context);
         server.setHandler(handler);
 
         try
         {
             server.start();
-            currentServer = server;
+
+            if(deployedEndpoints.containsKey(server.getURI()))
+            {
+                throw new IllegalStateException("Endpoint already deployed");
+            }
+
+            deployedEndpoints.put(server.getURI(), server);
+            connectionHandler.addServer(server.getURI());
+            logger.info("Endpoint deployed at: " + server.getURI());
         }
 
         catch (Exception e)
@@ -80,14 +105,17 @@ public class DeploymentHandler
     }
 
 
-    public void undeployEndpoint() throws Exception
+    public void undeployEndpoint(URI URI) throws Exception
     {
-        if(currentServer == null)
+        if(!deployedEndpoints.containsKey(URI))
         {
             throw new IllegalStateException("Endpoint not deployed");
         }
 
-        currentServer.stop();
-        currentServer = null;
+        Server server = deployedEndpoints.get(URI);
+        connectionHandler.removeServer(URI);
+        server.stop();
+        deployedEndpoints.remove(URI);
     }
+
 }

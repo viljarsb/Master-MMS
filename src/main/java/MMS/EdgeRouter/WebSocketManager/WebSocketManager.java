@@ -1,27 +1,31 @@
 package MMS.EdgeRouter.WebSocketManager;
 
+import org.apache.logging.log4j.core.jmx.Server;
+
 import java.io.IOException;
+import java.net.URI;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
 
 public class WebSocketManager
 {
     private static WebSocketManager instance;
-    private DeploymentHandler deploymentHandler;
-    private ConnectionHandler connectionHandler;
+
+    private final DeploymentService deploymentService;
 
     private WebSocketManager()
     {
-        this.deploymentHandler = new DeploymentHandler();
-        this.connectionHandler = ConnectionHandler.getHandler();
+        this.deploymentService = DeploymentService.getService();
     }
+
 
     public static WebSocketManager getManager()
     {
-        if(instance == null)
+        if (instance == null)
         {
             instance = new WebSocketManager();
         }
@@ -32,13 +36,18 @@ public class WebSocketManager
 
     public void deployEndpoint(int port, String path, int maxConnections) throws UnrecoverableKeyException, CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException
     {
-        deploymentHandler.deployEndpoint(port, path, maxConnections);
+        deploymentService.deployEndpoint(port, path, maxConnections);
     }
 
 
-    public void undeployEndpoint() throws Exception
+    public void undeployEndpoint(URI uri) throws Exception
     {
-        deploymentHandler.undeployEndpoint();
-        connectionHandler.clearSessions();
+        deploymentService.undeployEndpoint(uri);
+    }
+
+
+    public ArrayList<ServerInfo> getDeployedEndpoints()
+    {
+        return deploymentService.getDeployedEndpoints();
     }
 }
