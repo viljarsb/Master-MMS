@@ -1,9 +1,9 @@
 package MMS.EdgeRouter.ServiceBroadcastManager;
 
+import MMS.EdgeRouter.ServiceRegistry.EdgeRouterService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
 
@@ -12,7 +12,7 @@ public class ServiceBroadcastManager
     private static final Logger logger = LogManager.getLogger(ServiceBroadcastManager.class);
     private static final String SERVICE_TYPE = "_mms-edge-router._tcp.local.";
 
-    private final ServiceRegistry serviceRegistry;
+    private final BroadcastRegistry broadcastRegistry;
     private final BroadcastService broadcastService;
     private static ServiceBroadcastManager instance;
 
@@ -21,7 +21,7 @@ public class ServiceBroadcastManager
     {
         try
         {
-            this.serviceRegistry = new ServiceRegistry();
+            this.broadcastRegistry = new BroadcastRegistry();
             this.broadcastService = new BroadcastService();
             logger.info("ServiceBroadcastManager created");
         }
@@ -34,7 +34,7 @@ public class ServiceBroadcastManager
     }
 
 
-public static ServiceBroadcastManager getManager()
+    public static ServiceBroadcastManager getManager()
     {
         if (instance == null)
         {
@@ -44,32 +44,33 @@ public static ServiceBroadcastManager getManager()
         return instance;
     }
 
-    public void broadcastService(String serviceName, int servicePort, String path) throws IOException
+
+    public void broadcastService(EdgeRouterService service) throws IOException
     {
-        ServiceInfo serviceInfo = ServiceInfo.create(SERVICE_TYPE, serviceName, servicePort, "path=" + path);
+        ServiceInfo serviceInfo = ServiceInfo.create(SERVICE_TYPE, service.getServiceName(), service.getServicePort(), "path=" + service.getServicePath());
         broadcastService.broadcastService(serviceInfo);
-        serviceRegistry.registerService(serviceInfo);
+        broadcastRegistry.registerService(serviceInfo);
         logger.info("ServiceBroadcastManager broadcast service " + serviceInfo.getName());
     }
 
 
-    public void stopBroadcastingService(String serviceName) throws IllegalArgumentException
+    public void stopBroadcastingService(EdgeRouterService service) throws IllegalArgumentException
     {
-        ServiceInfo serviceInfo = serviceRegistry.getServiceInfo(serviceName);
+        ServiceInfo serviceInfo = broadcastRegistry.getServiceInfo(service.getServiceName());
 
         if (serviceInfo == null)
-            throw new IllegalArgumentException("Service " + serviceName + " is not registered");
+            throw new IllegalArgumentException("Service " + service.getServiceName() + " is not registered");
 
         broadcastService.stopBroadcastingService(serviceInfo);
-        serviceRegistry.unregisterService(serviceName);
-        logger.info("ServiceBroadcastManager stopped broadcasting service " + serviceName);
+        broadcastRegistry.unregisterService(service.getServiceName());
+        logger.info("ServiceBroadcastManager stopped broadcasting service " + service.getServiceName());
     }
 
 
     public void stopBroadcastingAllServices()
     {
         broadcastService.stopBroadcastingAllServices();
-        serviceRegistry.clear();
+        broadcastRegistry.clear();
         logger.info("ServiceBroadcastManager stopped broadcasting all services");
     }
 }

@@ -4,12 +4,12 @@ import javax.jmdns.ServiceInfo;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ServiceRegistry
+public class BroadcastRegistry
 {
     private final HashMap<String, ServiceInfo> serviceInfoMap;
 
 
-    ServiceRegistry()
+    BroadcastRegistry()
     {
         this.serviceInfoMap = new HashMap<>();
     }

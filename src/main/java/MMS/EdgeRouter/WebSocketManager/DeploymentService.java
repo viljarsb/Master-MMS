@@ -27,16 +27,20 @@ public class DeploymentService
     private static DeploymentService instance;
     private final HashMap<URI, Server> deployedEndpoints;
     private final ConnectionHandler connectionHandler;
+    private final WebSocketServerRegistry serverRegistry;
+
 
     private DeploymentService()
     {
         this.deployedEndpoints = new HashMap<>();
         this.connectionHandler = ConnectionHandler.getHandler();
+        this.serverRegistry = WebSocketServerRegistry.getRegistry();
     }
+
 
     public static DeploymentService getService()
     {
-        if(instance == null)
+        if (instance == null)
         {
             instance = new DeploymentService();
         }
@@ -45,7 +49,7 @@ public class DeploymentService
     }
 
 
-    public void deployEndpoint(int endpointPort, String endpointPath, Integer endpointMaxConnections) throws CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException, UnrecoverableKeyException
+    public Server deployEndpoint(int endpointPort, String endpointPath, Integer endpointMaxConnections) throws CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException, UnrecoverableKeyException
     {
         Server server;
 
@@ -88,14 +92,14 @@ public class DeploymentService
         {
             server.start();
 
-            if(deployedEndpoints.containsKey(server.getURI()))
+            if (deployedEndpoints.containsKey(server.getURI()))
             {
                 throw new IllegalStateException("Endpoint already deployed");
             }
 
             deployedEndpoints.put(server.getURI(), server);
-            connectionHandler.addServer(server.getURI());
             logger.info("Endpoint deployed at: " + server.getURI());
+            return server;
         }
 
         catch (Exception e)
@@ -105,17 +109,16 @@ public class DeploymentService
     }
 
 
-    public void undeployEndpoint(URI URI) throws Exception
+    public void undeployEndpoint(Server server) throws Exception
     {
-        if(!deployedEndpoints.containsKey(URI))
+        if (!deployedEndpoints.containsKey(URI))
         {
             throw new IllegalStateException("Endpoint not deployed");
         }
 
         Server server = deployedEndpoints.get(URI);
-        connectionHandler.removeServer(URI);
+            connectionHandler.removeServer(URI);
         server.stop();
         deployedEndpoints.remove(URI);
     }
-
 }

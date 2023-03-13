@@ -1,6 +1,7 @@
 package MMS.EdgeRouter.WebSocketManager;
 
-import org.apache.logging.log4j.core.jmx.Server;
+import MMS.EdgeRouter.ServiceRegistry.EdgeRouterService;
+import org.eclipse.jetty.server.Server;
 
 import java.io.IOException;
 import java.net.URI;
@@ -9,17 +10,18 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
-import java.util.ArrayList;
 
 public class WebSocketManager
 {
     private static WebSocketManager instance;
-
     private final DeploymentService deploymentService;
+    private final WebSocketServerRegistry webSocketServerRegistry;
+
 
     private WebSocketManager()
     {
         this.deploymentService = DeploymentService.getService();
+        this.webSocketServerRegistry = WebSocketServerRegistry.getRegistry();
     }
 
 
@@ -34,20 +36,21 @@ public class WebSocketManager
     }
 
 
-    public void deployEndpoint(int port, String path, int maxConnections) throws UnrecoverableKeyException, CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException
+    public void deployEndpoint(EdgeRouterService service) throws UnrecoverableKeyException, CertificateException, NoSuchAlgorithmException, IOException, KeyStoreException, KeyManagementException
     {
-        deploymentService.deployEndpoint(port, path, maxConnections);
+        String serviceName = service.getServiceName();
+        String path = service.getServicePath();
+        int port = service.getServicePort();
+        int maxConnections = 255;
+
+        Server server = deploymentService.deployEndpoint(port, path, maxConnections);
+        webSocketServerRegistry.deployServer(serviceName, server);
     }
 
 
-    public void undeployEndpoint(URI uri) throws Exception
+    public void undeployEndpoint(EdgeRouterService edgeRouterService) throws Exception
     {
-        deploymentService.undeployEndpoint(uri);
-    }
-
-
-    public ArrayList<ServerInfo> getDeployedEndpoints()
-    {
-        return deploymentService.getDeployedEndpoints();
+        Server server = webSocketServerRegistry.getServer(edgeRouterService.getServiceName());
+        deploymentService.undeployEndpoint(server);
     }
 }

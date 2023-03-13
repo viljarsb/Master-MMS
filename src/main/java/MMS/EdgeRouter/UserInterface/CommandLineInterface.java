@@ -1,6 +1,8 @@
 package MMS.EdgeRouter.UserInterface;
 
 import MMS.EdgeRouter.ServiceBroadcastManager.ServiceBroadcastManager;
+import MMS.EdgeRouter.ServiceRegistry.EdgeRouterService;
+import MMS.EdgeRouter.ServiceRegistry.ServiceRegistry;
 import MMS.EdgeRouter.WebSocketManager.ConnectionHandler;
 import MMS.EdgeRouter.WebSocketManager.WebSocketManager;
 import org.apache.commons.cli.*;
@@ -17,6 +19,7 @@ public class CommandLineInterface
     private static CommandLineInterface instance;
     private WebSocketManager webSocketManager;
     private ServiceBroadcastManager serviceBroadcastManager;
+    private ServiceRegistry serviceRegistry;
 
 
 
@@ -47,6 +50,7 @@ public class CommandLineInterface
     {
         options.addOption("h", "help", false, "Prints a list of commands");
         options.addOption("sd", "shutdown", false, "Shuts down the Edge Router");
+        options.addOption("ls", "list-services", false, "Lists all services");
 
         Option deployService = Option.builder("ds")
                 .argName("<service-name> <service-path> <service-port> <is-public>")
@@ -84,6 +88,11 @@ public class CommandLineInterface
                     shutdown();
                 }
 
+                else if (cmd.hasOption("ls"))
+                {
+                   listServices();
+                }
+
                 else if (cmd.hasOption("ds"))
                 {
                     startService(cmd.getOptionValues("ds"));
@@ -94,6 +103,7 @@ public class CommandLineInterface
                     System.out.println(input + " is not a valid command");
                 }
             }
+
             catch (ParseException e)
             {
                 System.out.println("Invalid command");
@@ -123,7 +133,8 @@ public class CommandLineInterface
 
         if(!path.startsWith("/"))
         {
-            throw new IllegalArgumentException("Path must start with a forward slash");
+            System.out.println("Path must start with a forward slash");
+            return;
         }
 
 
@@ -186,6 +197,9 @@ public class CommandLineInterface
                 System.out.println("Failed to start service: " + ex.getMessage());
             }
         }
+
+        EdgeRouterService service = new EdgeRouterService(name, path, port, isPublic);
+        serviceRegistry.addService(service);
     }
 
 
@@ -205,5 +219,12 @@ public class CommandLineInterface
         {
             System.out.println("Shutdown aborted");
         }
+    }
+
+
+    private void listServices()
+    {
+        System.out.println("Listing all services");
+        System.out.println(serviceRegistry.getAllServices());
     }
 }

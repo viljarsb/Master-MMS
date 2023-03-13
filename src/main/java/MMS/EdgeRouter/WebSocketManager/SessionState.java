@@ -14,6 +14,7 @@ public class SessionState
     private Boolean connected;
     private final CopyOnWriteArrayList<String> unfetchedMessages;
     private final PKIIdentity identity;
+    private final URI uri;
 
 
     public SessionState(Session session)
@@ -23,6 +24,7 @@ public class SessionState
         this.connected = true;
         this.unfetchedMessages = new CopyOnWriteArrayList<>();
         this.identity = null;
+        this.uri = session.getUpgradeRequest().getRequestURI();
     }
 
 
@@ -33,6 +35,7 @@ public class SessionState
         this.connected = true;
         this.unfetchedMessages = new CopyOnWriteArrayList<>();
         this.identity = identity;
+        this.uri = session.getUpgradeRequest().getRequestURI();
     }
 
 
@@ -57,5 +60,15 @@ public class SessionState
     public PKIIdentity getIdentity()
     {
         return identity;
+    }
+
+    public URI connectedTo()
+    {
+        return uri;
+    }
+
+    public boolean isConnected()
+    {
+        return connected;
     }
 }

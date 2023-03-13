@@ -16,6 +16,7 @@ public class EdgeRouterEndpoint extends WebSocketAdapter
     private UUID uuid;
     private ConnectionHandler connectionHandler;
 
+
     public EdgeRouterEndpoint()
     {
         super();
@@ -29,11 +30,12 @@ public class EdgeRouterEndpoint extends WebSocketAdapter
     {
         super.onWebSocketConnect(session);
         this.session = session;
+
         connectionHandler.registerClient(session);
 
         SessionState state = connectionHandler.getClientState(session);
 
-        if(state.isAuthenticated())
+        if (state.isAuthenticated())
         {
             PKIIdentity identity = state.getIdentity();
             String remoteAddress = session.getRemoteAddress().toString();

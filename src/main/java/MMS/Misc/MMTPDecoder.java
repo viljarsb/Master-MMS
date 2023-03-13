@@ -1,4 +1,4 @@
-package MMS.EncoderDecoder;
+package MMS.Misc;
 
 import MMS.MMTP.MMTPMessage;
 import com.fasterxml.jackson.annotation.JsonInclude;
