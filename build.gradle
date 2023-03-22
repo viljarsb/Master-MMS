@@ -2,11 +2,13 @@ plugins {
     id 'java'
 }
 
+
 group 'org.example'
 version '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
+    maven { url "https://dl.cloudsmith.io/public/libp2p/jvm-libp2p/maven/" }
 }
 
 dependencies {
@@ -16,6 +18,7 @@ dependencies {
 
     implementation 'org.apache.logging.log4j:log4j-api:2.20.0'
     implementation 'org.apache.logging.log4j:log4j-core:2.20.0'
+
 
     implementation 'org.jmdns:jmdns:3.5.3'
 
@@ -34,13 +37,25 @@ dependencies {
     implementation 'org.eclipse.jetty.websocket:websocket-api:9.4.43.v20210629'
     implementation 'org.eclipse.jetty.websocket:websocket-common:9.4.43.v20210629'
     implementation 'org.eclipse.jetty.websocket:websocket-server:9.4.43.v20210629'
+    implementation 'org.eclipse.jetty:jetty-servlets:9.4.44.v20210927'
     implementation 'org.eclipse.jetty.websocket:javax-websocket-server-impl:9.4.43.v20210629'
     implementation 'javax.websocket:javax.websocket-api:1.1'
     implementation 'org.eclipse.jetty:jetty-server:9.4.48.v20220622'
 
 
     implementation 'commons-cli:commons-cli:1.4'
+    // https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java
+    implementation 'com.google.protobuf:protobuf-java:3.22.2'
+
+
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
+
+    implementation 'com.squareup.okhttp3:okhttp:4.9.3'
+    implementation 'org.apache.activemq:activemq-all:5.16.3'
+
+
 }
+
 
 test {
     useJUnitPlatform()

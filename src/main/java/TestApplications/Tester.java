@@ -1,30 +1,58 @@
 package TestApplications;
 
-import MMS.Agent.Agent;
-import MMS.Agent.ServiceDiscoveryManager.RouterInfo;
+import MMS.ClientMMS.Client;
+import MMS.ClientMMS.ClientConfiguration;
+import MMS.ClientMMS.Exceptions.SetupException;
+import MMS.ClientMMS.SMMPCallback;
 
-import javax.websocket.DeploymentException;
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.concurrent.TimeoutException;
+
 
 public class Tester
 {
-    public static void main(String[] args) throws DeploymentException, URISyntaxException, IOException, TimeoutException
+    public static void main(String[] args) throws SetupException
     {
-        Agent agent = new Agent();
-        ArrayList<RouterInfo> routers = (ArrayList<RouterInfo>) agent.discover();
-        agent.connectAnonymously(routers.get(0));
-
-        try
+        SMMPCallback callback = new SMMPCallback()
         {
-            Thread.sleep(100000);
-        }
+            @Override
+            public void onDirectMessage(byte[] message, String sender)
+            {
 
-        catch (Exception e)
-        {
-            e.printStackTrace();
-        }
+            }
+
+
+            @Override
+            public void onSubjectCast(byte[] message, String subject)
+            {
+
+            }
+
+
+            @Override
+            public void onMessageDelivered(String id, String mrn)
+            {
+
+            }
+
+
+            @Override
+            public void onMessageDeliveryFailed(String id, String mrn)
+            {
+
+            }
+        };
+
+       String keystorePath = "C:\\Users\\Viljar\\IdeaProjects\\Master-MMS\\src\\main\\java\\TestIdentities\\keystore-test-viljar";
+      String keystorePassword = "8r91fpin885elh46aju8q0do6f";
+     String truststorePath = "C:\\Users\\Viljar\\IdeaProjects\\Master-MMS\\src\\main\\java\\TestIdentities\\truststore-root-ca";
+    String truststorePassword = "changeit";
+
+        ClientConfiguration.ConfigBuilder builder = new ClientConfiguration.ConfigBuilder();
+        builder.setCallback(callback);
+        builder.setKeyStore(keystorePath, keystorePassword);
+        builder.setTrustStore(truststorePath, truststorePassword);
+        builder.setCertificateStore(truststorePath, truststorePassword);
+        Client client = new Client(builder.build());
+
+        System.out.println(client.Discover());
     }
 }
