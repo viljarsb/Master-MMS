@@ -1,0 +1,9 @@
+package MMS.Client;
+
+public enum AgentStatus
+{
+    CONNECTED_ANONYMOUS,
+    CONNECTED_AUTHENTICATED,
+    NOT_CONNECTED,
+    LOST_CONNECTION
+}

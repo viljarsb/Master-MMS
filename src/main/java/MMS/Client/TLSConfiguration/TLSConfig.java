@@ -1,4 +1,4 @@
-package MMS.AgentV2;
+package MMS.Client.TLSConfiguration;
 
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 

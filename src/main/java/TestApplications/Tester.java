@@ -1,58 +1,30 @@
 package TestApplications;
 
-import MMS.ClientMMS.Client;
-import MMS.ClientMMS.ClientConfiguration;
-import MMS.ClientMMS.Exceptions.SetupException;
-import MMS.ClientMMS.SMMPCallback;
+import MMS.AgentV2.AgentFactory;
+import MMS.AgentV2.Exceptions.AgentFactoryInitException;
+import MMS.AgentV2.RouterInfo;
 
-
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 public class Tester
 {
-    public static void main(String[] args) throws SetupException
+    public static void main(String[] args) throws AgentFactoryInitException, ExecutionException, InterruptedException
     {
-        SMMPCallback callback = new SMMPCallback()
+        AgentFactory factory = AgentFactory.getFactory();
+        Future<List<RouterInfo>> future = factory.discover();
+        List<RouterInfo> routers = future.get();
+
+        for (RouterInfo router : routers)
         {
-            @Override
-            public void onDirectMessage(byte[] message, String sender)
-            {
-
-            }
-
-
-            @Override
-            public void onSubjectCast(byte[] message, String subject)
-            {
-
-            }
+            System.out.println(router.getServiceName());
+            System.out.println(router.getServiceIP());
+            System.out.println(router.getServicePort());
+            System.out.println(router.getServicePath());
+        }
 
 
-            @Override
-            public void onMessageDelivered(String id, String mrn)
-            {
-
-            }
-
-
-            @Override
-            public void onMessageDeliveryFailed(String id, String mrn)
-            {
-
-            }
-        };
-
-       String keystorePath = "C:\\Users\\Viljar\\IdeaProjects\\Master-MMS\\src\\main\\java\\TestIdentities\\keystore-test-viljar";
-      String keystorePassword = "8r91fpin885elh46aju8q0do6f";
-     String truststorePath = "C:\\Users\\Viljar\\IdeaProjects\\Master-MMS\\src\\main\\java\\TestIdentities\\truststore-root-ca";
-    String truststorePassword = "changeit";
-
-        ClientConfiguration.ConfigBuilder builder = new ClientConfiguration.ConfigBuilder();
-        builder.setCallback(callback);
-        builder.setKeyStore(keystorePath, keystorePassword);
-        builder.setTrustStore(truststorePath, truststorePassword);
-        builder.setCertificateStore(truststorePath, truststorePassword);
-        Client client = new Client(builder.build());
-
-        System.out.println(client.Discover());
     }
+
 }

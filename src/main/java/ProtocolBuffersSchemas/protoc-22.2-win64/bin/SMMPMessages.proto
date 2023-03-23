@@ -8,21 +8,6 @@ option java_package = "MMS.SMMP";
 message SMMPMessage {
   bool isEncrypted = 1;
   bool requiresAck = 2;
-  bytes signature = 4;
-  bytes payload = 5;
-  string x5u = 6;
-}
-
-message SMMPMessageAck {
-  string ack = 1;
-  bytes signature = 2;
-  string x5u = 3;
-}
-
-
-message SMMPMessage {
-  bool isEncrypted = 1;
-  bool requiresAck = 2;
   bytes signature = 3;
   bytes certificate = 4;
   bytes payload = 5;

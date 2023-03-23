@@ -1,9 +1,0 @@
-package MMS.AgentV2;
-
-public enum AgentV2Status
-{
-    CONNECTED_AUTHENTICATED,
-    CONNECTED_ANONYMOUS,
-    NOT_CONNECTED,
-    LOST_CONNECTION
-}
