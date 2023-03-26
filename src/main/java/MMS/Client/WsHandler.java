@@ -1,8 +1,8 @@
 package MMS.Client;
 
-import MMS.Client.Connections.AnonymousConnection;
-import MMS.Client.Connections.AuthenticatedConnection;
-import MMS.Client.Connections.Connection;
+import MMS.Client.Connections.DisconnectionReason;
+import MMS.Client.Interfaces.ConnectionListener;
+import MMS.Client.Interfaces.MessageListener;
 import MMS.Client.ServiceDiscovery.RouterInfo;
 import MMS.Client.TLSConfiguration.TLSConfig;
 import MMS.Client.TLSConfiguration.mTLSConfig;
@@ -17,25 +17,59 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 
+/**
+ * WsHandler is responsible for establishing WebSocket connections
+ * with a specified router, either anonymously or with client authentication.
+ * It uses ConnectionListener and MessageListener for handling the events
+ * during the WebSocket connection.
+ */
 public class WsHandler
 {
-    public AnonymousConnection connectAnonymously(RouterInfo routerInfo, TLSConfig tlsConfig, AgentAdapter adapter)
+
+    /**
+     * Connects to the specified router anonymously using the given TLS configuration,
+     * ConnectionListener, and MessageListener.
+     *
+     * @param routerInfo            the router information to connect to
+     * @param tlsConfig             the TLS configuration for the connection
+     * @param connectionListener    the listener for handling connection events
+     * @param messageListener       the listener for handling message events
+     */
+    public void connectAnonymously(RouterInfo routerInfo, TLSConfig tlsConfig, ConnectionListener eventListener, MessageListener messageListener)
     {
         String URI = routerInfo.getUri();
         SslContextFactory factory = tlsConfig.getTLSContextFactory();
-        return connect(URI, factory, adapter);
+        connect(URI, factory, eventListener, messageListener);
     }
 
 
-    public AuthenticatedConnection connectAuthenticated(RouterInfo routerInfo, mTLSConfig tlsConfig, AgentAdapter adapter)
+    /**
+     * Connects to the specified router with client authentication using the given mTLS configuration,
+     * ConnectionListener, and MessageListener.
+     *
+     * @param routerInfo           the router information to connect to
+     * @param tlsConfig            the mTLS configuration for the connection
+     * @param connectionListener   the listener for handling connection events
+     * @param messageListener      the listener for handling message events
+     */
+    public void connectAuthenticated(RouterInfo routerInfo, mTLSConfig tlsConfig, ConnectionListener eventListener, MessageListener messageListener)
     {
         String URI = routerInfo.getUri();
         SslContextFactory factory = tlsConfig.getTLSContextFactory();
-        return connect(URI, factory, adapter);
+        connect(URI, factory, eventListener, messageListener);
     }
 
 
-    public <T extends Connection> T connect(String URI, SslContextFactory tlsContextFactory, AgentAdapter adapter)
+    /**
+     * Establishes a WebSocket connection to the specified URI using the provided
+     * TLS context factory, ConnectionListener, and MessageListener.
+     *
+     * @param URI                  the URI of the router to connect to
+     * @param tlsContextFactory    the TLS context factory for creating the TLS context
+     * @param connectionListener   the listener for handling connection events
+     * @param messageListener      the listener for handling message events
+     */
+    private void connect(String URI, SslContextFactory tlsContextFactory, ConnectionListener connectionListener, MessageListener messageListener)
     {
         HttpClient httpClient;
         WebSocketClient client;
@@ -53,19 +87,16 @@ public class WsHandler
             ClientUpgradeRequest request = new ClientUpgradeRequest();
             request.setHeader("Sec-WebSocket-Protocol", "MMTP/1.0");
 
-            WsEndpoint wsEndpoint = new WsEndpoint(adapter);
+            WsEndpoint wsEndpoint = new WsEndpoint(connectionListener, messageListener);
 
             Future<Session> future = client.connect(wsEndpoint, destination, request);
             future.get(5, TimeUnit.SECONDS);
-            Connection connection = wsEndpoint.getConnection();
-            return (T) connection;
         }
 
         catch (Exception ex)
         {
-            adapter.onConnectionError(ex.getMessage(), ex.getCause());
+            DisconnectionReason reason = new DisconnectionReason("Could not establish WebSocket connection to edge router: " + ex.getMessage(), 1006);
+            connectionListener.onConnectError(reason);
         }
-
-        return null;
     }
 }

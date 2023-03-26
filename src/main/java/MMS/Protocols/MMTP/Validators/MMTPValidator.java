@@ -1,8 +1,9 @@
-package MMS.MMTP.Validators;
+package MMS.Protocols.MMTP.Validators;
 
 
-import MMS.MMTP.MessageFormats.*;
+import MMS.Client.Exceptions.MMTPValidationException;
 import MMS.Misc.MrnValidator;
+import MMS.Protocols.MMTP.MessageFormats.*;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -16,22 +17,17 @@ import java.util.UUID;
 public class MMTPValidator
 {
 
-    /**
-     * Validates a DirectApplicationMessage.
-     *
-     * @param message the message to validate
-     * @return true if the message is valid, false otherwise
-     */
-    public static boolean validate(DirectApplicationMessage message)
+    public static void validate(DirectApplicationMessage message) throws MMTPValidationException
     {
         // Validate id
         try
         {
             UUID.fromString(message.getId());
         }
+
         catch (IllegalArgumentException e)
         {
-            return false;
+            throw new MMTPValidationException("Message id is not a valid UUID");
         }
 
         // Validate recipients
@@ -39,14 +35,14 @@ public class MMTPValidator
         {
             if (!MrnValidator.validate(recipient))
             {
-                return false;
+                throw new MMTPValidationException("Destination: " + recipient + " is not a valid MRN");
             }
         }
 
         // Validate sender
         if (!MrnValidator.validate(message.getSender()))
         {
-            return false;
+            throw new MMTPValidationException("Sender: " + message.getSender() + " is not a valid MRN");
         }
 
         // Validate timestamp
@@ -56,44 +52,41 @@ public class MMTPValidator
             Instant expireTime = Instant.ofEpochSecond(message.getExpires().getSeconds(), message.getExpires().getNanos());
             if (expireTime.isBefore(now) || expireTime.isAfter(now.plus(30, ChronoUnit.DAYS)))
             {
-                return false;
+                throw new MMTPValidationException("Message expires at: " + expireTime + " which is outside the allowed range");
             }
         }
 
         // Validate payload
-        return message.getPayload().size() > 0;
+        if(message.getPayload().size() < 1)
+        {
+            throw new MMTPValidationException("Message payload is empty");
+        }
     }
 
 
-    /**
-     * Validates a SubjectCastApplicationMessage.
-     *
-     * @param message the message to validate
-     * @return true if the message is valid, false otherwise
-     */
-    public static boolean validate(SubjectCastApplicationMessage message)
+    public static void validate(SubjectCastApplicationMessage message) throws MMTPValidationException
     {
         // Validate id
         try
         {
             UUID.fromString(message.getId());
         }
+
         catch (IllegalArgumentException e)
         {
-            return false;
+            throw new MMTPValidationException("Message id is not a valid UUID");
         }
 
         // Validate subject
-        String subject = message.getSubject();
-        if (subject.length() < 1 || subject.length() > 100)
+        if (message.getSubject().length() > 100 || message.getSubject().length() < 1)
         {
-            return false;
+            throw new MMTPValidationException("Subject: " + message.getSubject() + " is not a valid subject");
         }
 
         // Validate sender
         if (!MrnValidator.validate(message.getSender()))
         {
-            return false;
+            throw new MMTPValidationException("Sender: " + message.getSender() + " is not a valid MRN");
         }
 
         // Validate timestamp
@@ -103,12 +96,15 @@ public class MMTPValidator
             Instant expireTime = Instant.ofEpochSecond(message.getExpires().getSeconds(), message.getExpires().getNanos());
             if (expireTime.isBefore(now) || expireTime.isAfter(now.plus(30, ChronoUnit.DAYS)))
             {
-                return false;
+                throw new MMTPValidationException("Message expires at: " + expireTime + " which is outside the allowed range");
             }
         }
 
         // Validate payload
-        return message.getPayload().size() > 0;
+        if(message.getPayload().size() < 1)
+        {
+            throw new MMTPValidationException("Message payload is empty");
+        }
     }
 
 

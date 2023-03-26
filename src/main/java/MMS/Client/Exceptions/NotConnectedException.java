@@ -1,4 +1,4 @@
-package MMS.Client.Connections;
+package MMS.Client.Exceptions;
 
 public class NotConnectedException extends Exception
 {
