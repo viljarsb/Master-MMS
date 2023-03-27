@@ -4,6 +4,8 @@ package MMS.EdgeRouter.SubscriptionManager;
 import MMS.EdgeRouter.WsManagement.ConnectionHandler;
 import MMS.EdgeRouter.WsManagement.ConnectionState;
 import net.maritimeconnectivity.pki.PKIIdentity;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.StatusCode;
 
@@ -17,11 +19,14 @@ import java.util.concurrent.ConcurrentSkipListSet;
  */
 public class SubscriptionManager
 {
+    private static final Logger logger = LogManager.getLogger(SubscriptionManager.class);
+    private static final Comparator<Session> sessionComparator = Comparator.comparing(Session::hashCode);
     private static SubscriptionManager instance;
+
     private final ConcurrentHashMap<String, Set<Session>> subscriptions;
     private final ConcurrentHashMap<String, Set<Session>> wantsDirectMessages;
+
     private final ConnectionHandler connectionHandler;
-    private static final Comparator<Session> sessionComparator = Comparator.comparing(Session::hashCode);
 
 
     /**
@@ -33,6 +38,7 @@ public class SubscriptionManager
         subscriptions = new ConcurrentHashMap<>();
         wantsDirectMessages = new ConcurrentHashMap<>();
         connectionHandler = ConnectionHandler.getInstance();
+        logger.info("SubscriptionManager initialized");
     }
 
 
@@ -45,9 +51,7 @@ public class SubscriptionManager
     public static synchronized SubscriptionManager getInstance()
     {
         if (instance == null)
-        {
             instance = new SubscriptionManager();
-        }
 
         return instance;
     }
@@ -56,15 +60,26 @@ public class SubscriptionManager
     /**
      * Adds subscriptions for the specified subjects and the subscriber session.
      *
-     * @param subject    The list of subjects to subscribe to.
+     * @param subjects   The list of subjects to subscribe to.
      * @param subscriber The subscriber session.
      */
-    public void addSubscription(List<String> subject, Session subscriber)
+    public void addSubscription(List<String> subjects, Session subscriber)
     {
-        for (String s : subject)
+        ConnectionState state = connectionHandler.getConnectionState(subscriber);
+
+        for (String s : subjects)
         {
+            if (s.length() > 100 || s.length() < 1)
+                continue;
+
             subscriptions.putIfAbsent(s, new ConcurrentSkipListSet<>(sessionComparator));
-            subscriptions.get(s).add(subscriber);
+            boolean subscribed = subscriptions.get(s).add(subscriber);
+
+            if (subscribed)
+                logger.info("Added subscription for subject {} for Agent ID: {}", s, state.getAgentId());
+
+            else
+                logger.info("Subscription already exists for subject {} for Agent ID: {}", s, state.getAgentId());
         }
     }
 
@@ -72,19 +87,29 @@ public class SubscriptionManager
     /**
      * Removes the subscription for the specified subjects and the subscriber session.
      *
-     * @param subject    The list of subjects to unsubscribe from.
+     * @param subjects   The list of subjects to unsubscribe from.
      * @param subscriber The subscriber session.
      */
-    public void removeSubscription(List<String> subject, Session subscriber)
+    public void removeSubscription(List<String> subjects, Session subscriber)
     {
-        subscriptions.get(subject).remove(subscriber);
-    }
+        ConnectionState state = connectionHandler.getConnectionState(subscriber);
+        for (String s : subjects)
+        {
+            boolean unsubscribed = subscriptions.get(s).remove(subscriber);
 
+            if (unsubscribed)
+                logger.info("Subscription removed for subject '{}' by agent with ID '{}'", s, state.getAgentId());
+
+            else
+                logger.info("Subscription not found for subject '{}' by agent with ID '{}'", s, state.getAgentId());
+        }
+    }
 
 
     /**
      * Adds a direct message subscription for the specified session.
      * Take note that a MRN can have multiple sessions, so we need to track the sessions.
+     * If the session is not authenticated, it will be closed due to policy violation.
      *
      * @param session The session to add a direct message subscription for.
      */
@@ -95,27 +120,47 @@ public class SubscriptionManager
 
         if (identity == null)
         {
-            session.close(StatusCode.POLICY_VIOLATION, "Agent is not authenticated, breach of policy");
-            return;
+            logger.error("An agent tried to subscribe to direct messages without authentication.");
+            session.close(StatusCode.POLICY_VIOLATION, "Agent tried to subscribe to direct messages without authentication.");
         }
 
-        String MRN = identity.getMrn();
-        wantsDirectMessages.putIfAbsent(MRN, new ConcurrentSkipListSet<>(sessionComparator));
-        wantsDirectMessages.get(MRN).add(session);
+        else
+        {
+            String MRN = identity.getMrn();
+            wantsDirectMessages.putIfAbsent(MRN, new ConcurrentSkipListSet<>(sessionComparator));
+            boolean subscribed = wantsDirectMessages.get(MRN).add(session);
+
+            if (subscribed)
+                logger.info("Added direct message subscription for MRN: {} for Agent ID: {}", MRN, state.getAgentId());
+
+            else
+                logger.info("Direct message subscription already exists for MRN: {} for Agent ID: {}", MRN, state.getAgentId());
+        }
     }
 
 
     /**
      * Removes the direct message subscription for the specified session.
      * Take note that a MRN can have multiple sessions, so we need to track the sessions.
+     * If the session is not authenticated, it will be ignored.
      *
      * @param session The session to remove the direct message subscription from.
      */
     public void removeDirectMessageSubscription(Session session)
     {
-        for (String MRN : wantsDirectMessages.keySet())
+        ConnectionState state = connectionHandler.getConnectionState(session);
+        PKIIdentity identity = state.getIdentity();
+
+        if(!(identity == null))
         {
-            wantsDirectMessages.get(MRN).remove(session);
+            String MRN = identity.getMrn();
+            boolean unsubscribed = wantsDirectMessages.get(MRN).remove(session);
+
+            if (unsubscribed)
+                logger.info("Direct message subscription removed for MRN: {} by agent with ID '{}'", MRN, state.getAgentId());
+
+            else
+                logger.info("Direct message subscription not found for MRN: {} by agent with ID '{}'", MRN, state.getAgentId());
         }
     }
 
@@ -131,11 +176,25 @@ public class SubscriptionManager
         Set<Session> sessions = new HashSet<>();
 
         for (String MRN : MRNs)
-        {
             sessions.addAll(wantsDirectMessages.get(MRN));
-        }
 
         return sessions;
+    }
+
+
+    /**
+     * Removes all subscriptions for the specified session.
+     * This is called when a session is closed.
+     *
+     * @param session The session to remove all subscriptions for.
+     */
+    public void removeSession(Session session)
+    {
+        for (String subject : subscriptions.keySet())
+            subscriptions.get(subject).remove(session);
+
+        for (String MRN : wantsDirectMessages.keySet())
+            wantsDirectMessages.get(MRN).remove(session);
     }
 
 
@@ -173,8 +232,12 @@ public class SubscriptionManager
     }
 
 
-
-    public HashMap<String, Integer> getSubscriptionNumbers()
+    /**
+     * Returns a Map containing the number of subscriptions for each subject.
+     *
+     * @return A Map containing the number of subscriptions for each subject.
+     */
+    public Map<String, Integer> getSubscriptionNumbers()
     {
         HashMap<String, Integer> subscriptionNumbers = new HashMap<>();
         for (String subject : subscriptions.keySet())
@@ -185,6 +248,11 @@ public class SubscriptionManager
     }
 
 
+    /**
+     * Returns a Map containing the number of direct message subscriptions for each MRN.
+     *
+     * @return A Map containing the number of direct message subscriptions for each MRN.
+     */
     public HashMap<String, Integer> getDirectMessageSubscriptionNumbers()
     {
         HashMap<String, Integer> subscriptionNumbers = new HashMap<>();

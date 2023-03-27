@@ -8,6 +8,7 @@ import org.eclipse.jetty.websocket.servlet.ServletUpgradeRequest;
 import javax.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.security.cert.X509Certificate;
+import java.util.UUID;
 
 
 /**
@@ -20,6 +21,7 @@ public class ConnectionState
     private final Session session;
     private PKIIdentity identity;
     private final URI connectionURI;
+    private String agentId;
 
 
     /**
@@ -31,13 +33,15 @@ public class ConnectionState
     {
         this.session = session;
         this.connectionURI = session.getUpgradeRequest().getRequestURI();
+        this.agentId = UUID.randomUUID().toString();
         checkAuthentication();
     }
 
 
     /**
      * Checks the authentication status of the session by looking for a
-     * client certificate and, if present, extracts the MCP-PKI identity.
+     * client certificate and, if present, extracts the MCP-PKI identity
+     * and stores it in the instance variable {@code identity}.
      */
     private void checkAuthentication()
     {
@@ -57,7 +61,7 @@ public class ConnectionState
      * Returns the PKI identity associated with the connection, if available.
      * If null, the connection is not established by an authenticated user.
      *
-     * @return the PKI identity, or null if not available
+     * @return the MCP PKI identity, or null if not available
      */
     public PKIIdentity getIdentity()
     {
@@ -96,5 +100,16 @@ public class ConnectionState
     public URI getConnectionURI()
     {
         return connectionURI;
+    }
+
+
+    /**
+     * Gets the Agent ID of the connected Agent.
+     *
+     * @return the Agent ID
+     */
+    public String getAgentId()
+    {
+        return agentId;
     }
 }

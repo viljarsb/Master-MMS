@@ -108,71 +108,57 @@ public class MMTPValidator
     }
 
 
-    /**
-     * Validates a Register message.
-     *
-     * @param message the message to validate
-     * @return true if the message is valid, false otherwise
-     */
-    public static boolean validate(Register message)
+
+    public static void validate(Register message) throws MMTPValidationException
     {
         // Validate interests
         List<String> interests = message.getInterestsList();
-        if (interests.isEmpty())
+
+        if (interests.isEmpty() && !message.hasWantDirectMessages())
         {
-            return false;
+            throw new MMTPValidationException("Register message is empty");
         }
 
         for (String interest : interests)
         {
             if (interest == null || interest.length() < 1 || interest.length() > 100)
             {
-                return false;
+                throw new MMTPValidationException("Subject: " + interest + " is not a valid subject");
             }
         }
 
         // Validate want_direct_messages
         if (message.hasWantDirectMessages() && !message.getWantDirectMessages())
         {
-            return false;
+            throw new MMTPValidationException("want_direct_messages must be true when present");
         }
-
-        // All checks passed
-        return true;
     }
 
 
-    /**
-     * Validates an Unregister message.
-     *
-     * @param message the message to validate
-     * @return true if the message is valid, false otherwise
-     */
-    public static boolean validate(Unregister message)
+
+    public static void validate(Unregister message) throws MMTPValidationException
     {
         // Validate interests
         List<String> interests = message.getInterestsList();
-        if (interests.isEmpty())
+
+        if (interests.isEmpty() && !message.hasWantDirectMessages())
         {
-            return false;
+            throw new MMTPValidationException("Register message is empty");
         }
 
         for (String interest : interests)
         {
             if (interest == null || interest.length() < 1 || interest.length() > 100)
             {
-                return false;
+                throw new MMTPValidationException("Subject: " + interest + " is not a valid subject");
             }
         }
 
         // Validate want_direct_messages
-        if (message.hasWantDirectMessages() && message.getWantDirectMessages())
+        if (message.hasWantDirectMessages() && !message.getWantDirectMessages())
         {
-            return false;
+            throw new MMTPValidationException("want_direct_messages must be false when present");
         }
-
-        // All checks passed
-        return true;
     }
 
 

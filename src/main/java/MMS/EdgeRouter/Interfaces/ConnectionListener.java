@@ -1,6 +1,8 @@
 package MMS.EdgeRouter.Interfaces;
 
 
+import MMS.EdgeRouter.MessageForwarding.ConnectionStatus;
+
 import java.nio.ByteBuffer;
 
 /**
@@ -11,7 +13,8 @@ import java.nio.ByteBuffer;
  */
 public interface ConnectionListener
 {
-    void onConnection(RemoteConnection connection);
+    void onConnection(RemoteConnection connection, ConnectionStatus status);
     void onDisconnection(RemoteConnection connection);
+    void onConditionChange(RemoteConnection connection, ConnectionStatus status);
     void onMessage(RemoteConnection connection, ByteBuffer message);
 }

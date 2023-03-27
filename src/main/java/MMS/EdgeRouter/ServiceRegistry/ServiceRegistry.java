@@ -1,8 +1,11 @@
 package MMS.EdgeRouter.ServiceRegistry;
 
 import MMS.EdgeRouter.Exceptions.ServiceRegistrationException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.*;
+
 
 /**
  * This class serves as a registry for managing {@link EndpointInfo} objects.
@@ -10,17 +13,34 @@ import java.util.*;
  * on the service name. Additionally, it allows for retrieval of all registered
  * endpoints.
  */
-public class EndpointRegistry
+public class ServiceRegistry
 {
-    private final Map<String, EndpointInfo> endpointRegistry;
+    private final static Logger logger = LogManager.getLogger(ServiceRegistry.class);
+    private static ServiceRegistry instance;
+
+    private final Map<String, EndpointInfo> serviceRegistry = new HashMap<>();
 
 
     /**
      * Constructs a new endpoint registry instance.
      */
-    public EndpointRegistry()
+    private ServiceRegistry()
     {
-        endpointRegistry = new HashMap<>();
+        logger.info("Endpoint registry initialized");
+    }
+
+
+    /**
+     * Returns the singleton instance of the endpoint registry.
+     *
+     * @return The singleton instance of the endpoint registry.
+     */
+    public synchronized static ServiceRegistry getRegistry()
+    {
+        if (instance == null)
+            instance = new ServiceRegistry();
+
+        return instance;
     }
 
 
@@ -34,20 +54,17 @@ public class EndpointRegistry
     {
         String serviceName = endpointInfo.getServiceName();
 
-        if (endpointRegistry.containsKey(serviceName))
+        for (EndpointInfo registeredService : serviceRegistry.values())
         {
-            throw new ServiceRegistrationException("A service with the name " + serviceName + " is already registered");
-        }
-
-        for (EndpointInfo existingEndpoint : endpointRegistry.values())
-        {
-            if (existingEndpoint.equals(endpointInfo))
+            if (registeredService.equals(endpointInfo))
             {
-                throw new ServiceRegistrationException("Service clash: " + existingEndpoint + " and " + endpointInfo);
+                logger.info("Failed to register service: {} - Service already exists", endpointInfo);
+                throw new ServiceRegistrationException("Service already exists");
             }
         }
 
-        endpointRegistry.put(serviceName, endpointInfo);
+        logger.info("Registered service: {}", endpointInfo);
+        serviceRegistry.put(serviceName, endpointInfo);
     }
 
 
@@ -55,10 +72,11 @@ public class EndpointRegistry
      * Removes an endpoint from the registry by its service name.
      *
      * @param serviceName The name of the service to be removed.
+     * @return The {@link EndpointInfo} object that was removed, or null if not found.
      */
-    public void removeEndpoint(String serviceName)
+    public EndpointInfo removeEndpoint(String serviceName)
     {
-        endpointRegistry.remove(serviceName);
+        return serviceRegistry.remove(serviceName);
     }
 
 
@@ -70,7 +88,7 @@ public class EndpointRegistry
      */
     public EndpointInfo getEndpointInfo(String serviceName)
     {
-        return endpointRegistry.get(serviceName);
+        return serviceRegistry.get(serviceName);
     }
 
 
@@ -81,6 +99,6 @@ public class EndpointRegistry
      */
     public List<EndpointInfo> getEndpoints()
     {
-        return new ArrayList<>(endpointRegistry.values());
+        return new ArrayList<>(serviceRegistry.values());
     }
 }

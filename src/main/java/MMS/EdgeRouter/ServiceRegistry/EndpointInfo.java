@@ -19,7 +19,7 @@ public class EndpointInfo
     private final String servicePath;
     private final int servicePort;
     private final Boolean isPublic;
-    private final String address;
+    private final InetAddress address;
     private final int maxConnections;
     private final int maxRequestsPerSec;
     private final long delayMs;
@@ -29,12 +29,12 @@ public class EndpointInfo
     private final int tooManyCode;
     private final String additionalData;
 
-    private TLSConfiguration tlsConfiguration;
+    private final TLSConfiguration tlsConfiguration;
 
 
     /**
      * Private constructor for the EndpointInfo class.
-     * Initializes fields with the values provided by the builder.
+     * Initialize fields with the values provided by the builder.
      *
      * @param builder The {@link Builder} object containing values for the fields.
      */
@@ -88,7 +88,7 @@ public class EndpointInfo
     }
 
 
-    public String getAddress()
+    public InetAddress getAddress()
     {
         return address;
     }
@@ -285,7 +285,7 @@ public class EndpointInfo
     }
 
 
-    private String getLocalIPAddress()
+    private InetAddress getLocalIPAddress()
     {
         try
         {
@@ -299,7 +299,7 @@ public class EndpointInfo
                     InetAddress inetAddress = inetAddresses.nextElement();
                     if (!inetAddress.isLoopbackAddress() && inetAddress.getHostAddress().indexOf(':') == -1)
                     {
-                        return inetAddress.getHostAddress();
+                        return inetAddress;
                     }
                 }
             }

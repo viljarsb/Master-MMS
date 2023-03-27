@@ -11,6 +11,6 @@ import java.nio.ByteBuffer;
 public interface RemoteConnection
 {
     void sendMessage(ByteBuffer message);
-    void getStatus(Boolean status);
+    void getStatus();
     void close();
 }

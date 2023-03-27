@@ -47,8 +47,7 @@ public class CommandLineHandler
 
     public void startCli()
     {
-        running = true;
-        ThreadPoolService.getWorkerPool().execute(this::start);
+        ThreadPoolService.executeAsync(this::start);
     }
 
 
@@ -132,6 +131,7 @@ public class CommandLineHandler
         {
             System.out.println("There are no services registered.");
         }
+
         else
         {
             System.out.println();
@@ -139,8 +139,16 @@ public class CommandLineHandler
             System.out.printf("%-30s %-20s %-10s %n", "Service Name", "Service Path", "Connections");
             for (EndpointInfo service : services)
             {
-                int connections = serviceManager.getConnections(service.getServiceName());
-                System.out.printf("%-30s %-20s %-10s %n", service.getServiceName(), service.getServicePath(), connections);
+                try
+                {
+                    int connections = serviceManager.getConnections(service.getServiceName());
+                    System.out.printf("%-30s %-20s %-10s %n", service.getServiceName(), service.getServicePath(), connections);
+                }
+
+                catch (Exception e)
+                {
+                    System.out.println("An error occurred when attempting to list services: " + e.getMessage());
+                }
             }
         }
     }
@@ -155,7 +163,12 @@ public class CommandLineHandler
         int totalConnections = 0;
         for (EndpointInfo info : endpointInfos)
         {
-            totalConnections += serviceManager.getConnections(info.getServiceName());
+            try
+            {
+                totalConnections += serviceManager.getConnections(info.getServiceName());
+            }
+
+            catch (Exception ignored) {}
         }
 
         System.out.println();
@@ -194,6 +207,13 @@ public class CommandLineHandler
         System.out.println();
         List<EndpointInfo> services = serviceManager.getAllServices();
 
+        if(services.isEmpty())
+        {
+            System.out.println("There are no services registered.");
+            return;
+        }
+
+        System.out.println("Services currently running:");
         for (EndpointInfo service : services)
         {
             int connections = serviceManager.getConnections(service.getServiceName());
@@ -304,8 +324,8 @@ public class CommandLineHandler
         System.out.println();
         System.out.println("Listing subscriptions...");
 
-        HashMap<String, Integer> overview = subscriptionManager.getSubscriptionNumbers();
-        HashMap<String, Integer> directMessages = subscriptionManager.getDirectMessageSubscriptionNumbers();
+        Map<String, Integer> overview = subscriptionManager.getSubscriptionNumbers();
+        Map<String, Integer> directMessages = subscriptionManager.getDirectMessageSubscriptionNumbers();
 
         if (overview.isEmpty() && directMessages.isEmpty())
         {

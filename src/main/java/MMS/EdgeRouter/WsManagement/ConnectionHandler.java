@@ -1,5 +1,9 @@
 package MMS.EdgeRouter.WsManagement;
 
+import MMS.EdgeRouter.SubscriptionManager.SubscriptionManager;
+import net.maritimeconnectivity.pki.PKIIdentity;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.websocket.api.Session;
 
 import java.net.URI;
@@ -14,8 +18,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ConnectionHandler
 {
-    private final ConcurrentHashMap<Session, ConnectionState> connections;
+    private static final Logger logger = LogManager.getLogger(ConnectionHandler.class);
     private static ConnectionHandler instance;
+
+    private final ConcurrentHashMap<Session, ConnectionState> connections = new ConcurrentHashMap<>();
+    private final SubscriptionManager subscriptionManager = SubscriptionManager.getInstance();
 
 
     /**
@@ -24,7 +31,7 @@ public class ConnectionHandler
      */
     private ConnectionHandler()
     {
-        connections = new ConcurrentHashMap<>();
+        logger.info("Connection handler created");
     }
 
 
@@ -37,9 +44,7 @@ public class ConnectionHandler
     public synchronized static ConnectionHandler getInstance()
     {
         if (instance == null)
-        {
             instance = new ConnectionHandler();
-        }
 
         return instance;
     }
@@ -55,6 +60,18 @@ public class ConnectionHandler
     {
         ConnectionState state = new ConnectionState(session);
         connections.put(session, state);
+        PKIIdentity identity = state.getIdentity();
+
+        if (identity != null)
+        {
+            logger.info("Agent added: Agent ID = {} - connected in authenticated mode.\nCN: {}\n{}", state.getAgentId(), identity.getCn(), identity.getMrn());
+            subscriptionManager.addDirectMessageSubscription(session);
+        }
+
+        else
+        {
+            logger.info("Agent added: Agent ID = {} - connected in unauthenticated mode.", state.getAgentId());
+        }
     }
 
 
@@ -66,9 +83,10 @@ public class ConnectionHandler
      */
     public void removeConnection(Session session)
     {
-        connections.remove(session);
+        ConnectionState state = connections.remove(session);
+        subscriptionManager.removeSession(state.getSession());
+        logger.info("Removed connection: Agent ID = {}", state.getAgentId());
     }
-
 
 
     /**
@@ -89,6 +107,17 @@ public class ConnectionHandler
         }
 
         return sessions;
+    }
+
+
+    /**
+     * Retrieves all {@code ConnectionState} objects associated with all WebSocket sessions.
+     *
+     * @return a list of all {@code ConnectionState} objects
+     */
+    public List<ConnectionState> getAllConnectionStates()
+    {
+        return new ArrayList<>(connections.values());
     }
 
 

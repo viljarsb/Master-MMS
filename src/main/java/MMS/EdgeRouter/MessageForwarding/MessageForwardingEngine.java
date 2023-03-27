@@ -131,7 +131,7 @@ public class MessageForwardingEngine implements ConnectionListener
      * @param connection the new connection that was established, can be implemented by any form of connection.
      */
     @Override
-    public void onConnection(RemoteConnection connection)
+    public void onConnection(RemoteConnection connection, ConnectionStatus status)
     {
         logger.info("A new connection was established");
         remoteGateways.add(connection);
@@ -151,6 +151,13 @@ public class MessageForwardingEngine implements ConnectionListener
     }
 
 
+    @Override
+    public void onConditionChange(RemoteConnection connection, ConnectionStatus status)
+    {
+        logger.info("A connection condition changed");
+    }
+
+
     /**
      * Called once a message is received from a remote gateway.
      *
@@ -161,5 +168,43 @@ public class MessageForwardingEngine implements ConnectionListener
     public void onMessage(RemoteConnection connection, ByteBuffer message)
     {
         logger.info("Received a message from a remote gateway");
+    }
+
+
+    public void shutdown()
+    {
+        for (RemoteConnection connection : remoteGateways)
+        {
+            connection.close();
+        }
+    }
+
+
+    public void getConnections()
+    {
+
+    }
+
+
+    private static class ConnectionContainer
+    {
+        private final RemoteConnection connection;
+        private final ConnectionStatus status;
+
+        public ConnectionContainer(RemoteConnection connection, ConnectionStatus status)
+        {
+            this.connection = connection;
+            this.status = status;
+        }
+
+        public RemoteConnection getConnection()
+        {
+            return connection;
+        }
+
+        public ConnectionStatus getStatus()
+        {
+            return status;
+        }
     }
 }

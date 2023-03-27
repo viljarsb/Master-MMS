@@ -1,9 +1,9 @@
 package MMS.EdgeRouter.WsManagement;
 
+import MMS.EdgeRouter.Exceptions.NoSuchServiceException;
 import MMS.EdgeRouter.ServiceRegistry.EndpointInfo;
 import MMS.EdgeRouter.Exceptions.WsEndpointDeploymentException;
 import MMS.EdgeRouter.Exceptions.WsEndpointUndeploymentException;
-import MMS.EdgeRouter.ServiceRegistry.TLSConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.server.Server;
@@ -20,17 +20,30 @@ public class WsEndpointManager
     private static final Logger logger = LogManager.getLogger(WsEndpointManager.class);
     private static WsEndpointManager instance;
 
-    private final HashMap<String, Server> deployedEndpoints;
-    private final DeploymentService deploymentService;
+    private final ConnectionHandler connectionHandler = ConnectionHandler.getInstance();
+    private final HashMap<String, Server> deployedEndpoints = new HashMap<>();
 
 
     /**
      * Constructs a new {@code WsEndpointManager} instance.
      */
-    public WsEndpointManager()
+    private WsEndpointManager()
     {
-        this.deployedEndpoints = new HashMap<>();
-        this.deploymentService = new DeploymentService();
+        logger.info("WsEndpointManager initialized.");
+    }
+
+
+    /**
+     * Returns the singleton instance of the {@code WsEndpointManager} class.
+     *
+     * @return the singleton instance of the {@code WsEndpointManager} class
+     */
+    public static WsEndpointManager getManager()
+    {
+        if (instance == null)
+            instance = new WsEndpointManager();
+
+        return instance;
     }
 
 
@@ -46,21 +59,20 @@ public class WsEndpointManager
 
         if (deployedEndpoints.containsKey(name))
         {
-            logger.error("Endpoint already deployed: " + name);
+            logger.error("Endpoint already deployed: {}", name);
             throw new WsEndpointDeploymentException("Endpoint already deployed: " + name);
         }
 
-        TLSConfiguration tlsConfiguration = null;
-
         try
         {
-            Server server = deploymentService.deployEndpoint(endpointInfo);
+            Server server = DeploymentService.deployEndpoint(endpointInfo);
             deployedEndpoints.put(name, server);
+            logger.info("Endpoint '{}' successfully deployed.", name);
         }
 
         catch (Exception ex)
         {
-            logger.error("Could not deploy endpoint: " + ex.getMessage());
+            logger.error("Could not deploy endpoint '{}': {}", name, ex.getMessage(), ex);
             throw new WsEndpointDeploymentException("Failed to deploy endpoint: " + name, ex.getCause());
         }
     }
@@ -78,14 +90,15 @@ public class WsEndpointManager
 
         if (server != null)
         {
-            deploymentService.shutdown(server);
+            DeploymentService.shutdown(server);
             deployedEndpoints.remove(serviceName);
+            logger.info("Endpoint '{}' successfully shut down.", serviceName);
         }
 
         else
         {
-            logger.error("Failed to shutdown endpoint: " + serviceName);
-            throw new WsEndpointUndeploymentException("Failed to shutdown endpoint: " + serviceName);
+            logger.error("Endpoint not found: {}", serviceName);
+            throw new WsEndpointUndeploymentException("Endpoint not found: " + serviceName);
         }
     }
 
@@ -96,17 +109,22 @@ public class WsEndpointManager
      * @param serviceName the name of the WebSocket endpoint
      * @return the number of active connections for the specified endpoint
      */
-    public int getConnections(String serviceName)
+    public int getConnections(String serviceName) throws NoSuchServiceException
     {
         Server server = deployedEndpoints.get(serviceName);
-        List<Session> sessions = ConnectionHandler.getInstance().getSessions(server.getURI());
+
+        if (server == null)
+        {
+            throw new NoSuchServiceException("Endpoint not found: " + serviceName);
+        }
+
+        List<Session> sessions = connectionHandler.getSessions(server.getURI());
         return sessions.size();
     }
 
 
     /**
      * Returns the number of active connections for all deployed WebSocket endpoints.
-     *
      *
      * @return the total number of active connections for all deployed endpoints
      */
@@ -116,7 +134,7 @@ public class WsEndpointManager
 
         for (Server server : deployedEndpoints.values())
         {
-            totalConnections += getConnections(server.getURI().toString());
+           totalConnections += connectionHandler.getSessions(server.getURI()).size();
         }
 
         return totalConnections;

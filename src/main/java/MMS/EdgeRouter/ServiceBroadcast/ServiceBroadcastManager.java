@@ -7,128 +7,202 @@ import org.apache.logging.log4j.Logger;
 
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
-import java.util.HashMap;
+
+import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * {@code ServiceBroadcastManager} is a class responsible for broadcasting service information and managing the broadcasted services.
- * It maintains a collection of {@link ServiceBroadcaster} instances for different interfaces and a collection of {@link ServiceInfo} instances.
+ * This class is responsible for managing the broadcasting of MMS edge router services using mDNS protocol.
+ * It uses the {@code ServiceBroadcaster} class to actually broadcast the services.
  * <p>
- * The {@link ServiceInfo} instances represent broadcasted edge router services, and broadcast DNS resource records with the necessary
- * information needed by MMS Agents to connect.
+ * In addition, it keeps track of all the services that have been broadcasted. It also provides methods to stop
+ * broadcasting a service and to get the list of all currently broadcasted services.
  */
-public class ServiceBroadcastManager
+public final class ServiceBroadcastManager
 {
     private static final Logger logger = LogManager.getLogger(ServiceBroadcastManager.class);
+    private static ServiceBroadcastManager instance;
     private static final String SERVICE_TYPE = "_mms-edge-router._tcp.local.";
 
-    private final Map<String, ServiceBroadcaster> serviceBroadcasters;
-    private final Map<String, ServiceInfo> services;
+    private final Map<InetAddress, ServiceBroadcaster> serviceBroadcasters = new ConcurrentHashMap<>();
+    private final Map<String, ServiceInfo> services = new ConcurrentHashMap<>();
 
 
     /**
      * Constructor for the ServiceBroadcastManager class.
      * Initializes the serviceBroadcasters and services maps.
      */
-    public ServiceBroadcastManager()
+    private ServiceBroadcastManager()
     {
-        this.serviceBroadcasters = new HashMap<>();
-        this.services = new HashMap<>();
+        logger.info("Service Broadcast Manager Initialized");
     }
 
 
     /**
-     * Broadcasts the service information provided by the {@link EndpointInfo} object.
+     * Gets the singleton instance of ServiceBroadcastManager.
      *
-     * @param endpointInfo An {@link EndpointInfo} object containing service information such as name, port, path, and interface address.
-     * @throws ServiceBroadcastException If the service is already broadcasted or a {@link ServiceBroadcaster} could not be created for the specified interface address.
+     * @return The singleton instance of ServiceBroadcastManager.
+     */
+    public synchronized static ServiceBroadcastManager getManager()
+    {
+        if (instance == null)
+            instance = new ServiceBroadcastManager();
+
+        return instance;
+    }
+
+
+    /**
+     * Broadcasts the given service using the ServiceBroadcaster class, what network interface
+     * to use is determined by the address specified in the endpointInfo parameter.
+     *
+     * @param endpointInfo The information about the endpoint that provides the service.
+     * @throws ServiceBroadcastException If the service could not be broadcasted.
      */
     public void broadcastService(EndpointInfo endpointInfo) throws ServiceBroadcastException
     {
-        String serviceName = endpointInfo.getServiceName();
-        int servicePort = endpointInfo.getServicePort();
-        String servicePath = endpointInfo.getServicePath();
-        String interfaceAddress = endpointInfo.getAddress();
-
-        ServiceInfo serviceInfo = ServiceInfo.create(SERVICE_TYPE, serviceName, servicePort, "Path=" + servicePath);
-
-        String additionalData = endpointInfo.getAdditionalData();
-
-        if(additionalData != null)
-            serviceInfo.setText(additionalData.getBytes());
-
-        for (ServiceInfo service : services.values())
+        if (endpointInfo == null)
         {
-            if (service.equals(serviceInfo))
-            {
-                logger.info("Service already broadcasted");
-                throw new ServiceBroadcastException("Service with name " + serviceName + " already broadcasted");
-            }
+            String errorMessage = "EndpointInfo cannot be null";
+            logger.error(errorMessage);
+            throw new ServiceBroadcastException(errorMessage);
         }
 
-        if (!serviceBroadcasters.containsKey(interfaceAddress))
+        String name = endpointInfo.getServiceName();
+        int port = endpointInfo.getServicePort();
+        String path = endpointInfo.getServicePath();
+        String data = endpointInfo.getAdditionalData();
+
+        ServiceInfo serviceInfo = createServiceInfo(name, port, path, data);
+
+        if (services.containsValue(serviceInfo))
+        {
+            String errorMessage = String.format("Service with name '%s' already broadcasted", endpointInfo.getServiceName());
+            logger.error(errorMessage);
+            throw new ServiceBroadcastException(errorMessage);
+        }
+
+        ServiceBroadcaster broadcaster = getServiceBroadcaster(endpointInfo.getAddress());
+
+        try
+        {
+            broadcaster.broadcastService(serviceInfo);
+            services.put(endpointInfo.getServiceName(), serviceInfo);
+            logger.info("Broadcasted service '{}' on interface '{}'", endpointInfo.getServiceName(), endpointInfo.getAddress());
+        }
+
+        catch (IOException ex)
+        {
+            String errorMessage = String.format("Could not broadcast service '%s' on interface '%s'", endpointInfo.getServiceName(), endpointInfo.getAddress());
+            logger.error(errorMessage, ex);
+            throw new ServiceBroadcastException(errorMessage, ex.getCause());
+        }
+    }
+
+
+    /**
+     * Stops broadcasting the service with the specified name.
+     *
+     * @param serviceName The name of the service to stop broadcasting.
+     */
+    public void stopBroadcastingService(String serviceName) throws ServiceBroadcastException
+    {
+        ServiceInfo serviceInfo = services.get(serviceName);
+
+        if (serviceInfo == null)
+        {
+            String errorMessage = String.format("Service with name '%s' not broadcasted", serviceName);
+            logger.error(errorMessage);
+            throw new ServiceBroadcastException(errorMessage);
+        }
+
+        InetAddress interfaceAddress = serviceInfo.getInetAddresses()[0];
+        ServiceBroadcaster broadcaster = serviceBroadcasters.get(interfaceAddress);
+
+        broadcaster.stopBroadcastingService(serviceInfo);
+        services.remove(serviceName);
+        logger.info("Stopped broadcasting service '{}' on interface '{}'", serviceName, interfaceAddress);
+
+        if (broadcaster.getBroadcastCounter() == 0)
+        {
+            broadcaster.destroy();
+            serviceBroadcasters.remove(interfaceAddress);
+            logger.info("Closed ServiceBroadcaster for interface '{}'", interfaceAddress);
+        }
+    }
+
+
+    /**
+     * Gets a list of all currently broadcasted services.
+     *
+     * @return A list of all currently broadcasted services.
+     */
+    public List<String> getBroadcastedServices()
+    {
+        return new ArrayList<>(services.keySet());
+    }
+
+
+    /**
+     * Creates a ServiceInfo object based on the given EndpointInfo object.
+     *
+     * @param name           The name of the service.
+     * @param port           The port on which the service is listening.
+     * @param path           The path to the service.
+     * @param additionalData Additional data to be added to the service.
+     * @return A ServiceInfo object created based on the given EndpointInfo object.
+     */
+    private ServiceInfo createServiceInfo(String name, int port, String path, String additionalData)
+    {
+        ServiceInfo serviceInfo = ServiceInfo.create(SERVICE_TYPE, name, port, "Path=" + path);
+
+        Optional<String> data = Optional.ofNullable(additionalData);
+        data.ifPresent(d -> serviceInfo.setText(d.getBytes()));
+
+        return serviceInfo;
+    }
+
+
+    /**
+     * Gets the ServiceBroadcaster object for the given interface address. If the object does not exist, creates it.
+     * Synchronized to prevent multiple threads from creating the same object at the same time.
+     *
+     * @param interfaceAddress The interface address to use.
+     * @return The ServiceBroadcaster object for the given interface address.
+     * @throws ServiceBroadcastException If a new ServiceBroadcaster object cannot be created.
+     */
+    private synchronized ServiceBroadcaster getServiceBroadcaster(InetAddress interfaceAddress) throws ServiceBroadcastException
+    {
+        if(interfaceAddress == null)
+        {
+            String errorMessage = "Interface address cannot be null";
+            logger.error(errorMessage);
+            throw new ServiceBroadcastException(errorMessage);
+        }
+
+
+        ServiceBroadcaster broadcaster = serviceBroadcasters.get(interfaceAddress);
+
+        if (broadcaster == null)
         {
             try
             {
-                ServiceBroadcaster broadcaster = new ServiceBroadcaster(interfaceAddress);
+                broadcaster = new ServiceBroadcaster(interfaceAddress);
                 serviceBroadcasters.put(interfaceAddress, broadcaster);
-                broadcaster.broadcastService(serviceInfo);
-                services.put(serviceName, serviceInfo);
             }
 
             catch (IOException ex)
             {
-                logger.error("Could not create service broadcaster for interface " + interfaceAddress);
-                throw new ServiceBroadcastException("Could not create service broadcaster for interface " + interfaceAddress, ex.getCause());
+                String errorMessage = String.format("Could not create service broadcaster for interface '%s'", interfaceAddress);
+                logger.error(errorMessage, ex);
+                throw new ServiceBroadcastException(errorMessage, ex.getCause());
             }
         }
-    }
 
-
-    /**
-     * Stops broadcasting the service with the specified service name.
-     *
-     * @param serviceName The name of the service to stop broadcasting.
-     */
-    public void stopBroadcastingService(String serviceName)
-    {
-        ServiceInfo serviceInfo = services.get(serviceName);
-        String interfaceAddress = serviceInfo.getInetAddresses()[0].getHostAddress();
-        ServiceBroadcaster broadcaster = serviceBroadcasters.get(interfaceAddress);
-        broadcaster.stopBroadcastingService(serviceInfo);
-        services.remove(serviceName);
-
-        if(broadcaster.getBroadcastCounter() < 1)
-        {
-            try
-            {
-                broadcaster.close();
-                serviceBroadcasters.remove(interfaceAddress);
-            }
-
-            catch (IOException ignored) {}
-        }
-    }
-
-
-
-    /**
-     * Stops broadcasting all services and closes all {@link ServiceBroadcaster} instances.
-     */
-    public void stopAllBroadcasts()
-    {
-        for (ServiceBroadcaster broadcaster : serviceBroadcasters.values())
-        {
-            broadcaster.stopBroadcastingAllServices();
-
-            try
-            {
-                broadcaster.close();
-            }
-
-            catch (IOException ignored) {}
-        }
-
-        serviceBroadcasters.clear();
+        return broadcaster;
     }
 }

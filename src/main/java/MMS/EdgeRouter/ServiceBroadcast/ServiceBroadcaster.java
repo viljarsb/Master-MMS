@@ -1,29 +1,39 @@
 package MMS.EdgeRouter.ServiceBroadcast;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The {@code ServiceBroadcaster} class provides methods for broadcasting and stopping service advertisements
  * using JmDNS (Java Multicast DNS) zero-configuration networking technology.
  */
-public class ServiceBroadcaster
+class ServiceBroadcaster
 {
+    private final static Logger logger = LogManager.getLogger(ServiceBroadcaster.class);
+
     private final JmDNS jmdns;
-    private int broadcastingCounter;
+    private final String address;
+    private final AtomicInteger broadcastingCounter;
 
 
     /**
      * Constructs a new {@code ServiceBroadcaster} object with the given address.
      *
-     * @param address The IP address used to create the JmDNS instance.
+     * @param address The address to bind the JmDNS instance to.
      * @throws IOException If an I/O error occurs while creating the JmDNS instance.
      */
-    ServiceBroadcaster(String address) throws IOException
+    ServiceBroadcaster(InetAddress address) throws IOException
     {
         this.jmdns = JmDNS.create(address);
-        this.broadcastingCounter = 0;
+        this.address = address.getHostAddress();
+        this.broadcastingCounter = new AtomicInteger(0);
+        logger.info("Service Broadcaster Initialized for address: {}", address.getHostAddress());
     }
 
 
@@ -35,9 +45,9 @@ public class ServiceBroadcaster
      */
     void broadcastService(ServiceInfo serviceInfo) throws IOException
     {
-        this.jmdns.registerService(serviceInfo);
-        this.broadcastingCounter++;
-        System.out.println("Service broadcasted: " + serviceInfo.getName());
+        jmdns.registerService(serviceInfo);
+        broadcastingCounter.incrementAndGet();
+        logger.info("Service '{}' broadcasted on address: {}", serviceInfo.getName(), address);
     }
 
 
@@ -48,30 +58,9 @@ public class ServiceBroadcaster
      */
     void stopBroadcastingService(ServiceInfo serviceInfo)
     {
-        this.jmdns.unregisterService(serviceInfo);
-        this.broadcastingCounter--;
-    }
-
-
-    /**
-     * Stops broadcasting all services currently being advertised by the JmDNS instance.
-     */
-    void stopBroadcastingAllServices()
-    {
-        this.jmdns.unregisterAllServices();
-        this.broadcastingCounter = 0;
-    }
-
-
-    /**
-     * Closes the JmDNS instance and releases any resources associated with it.
-     *
-     * @throws IOException If an I/O error occurs while closing the JmDNS instance.
-     */
-    void close() throws IOException
-    {
-        this.jmdns.unregisterAllServices();
-        this.jmdns.close();
+        jmdns.unregisterService(serviceInfo);
+        broadcastingCounter.decrementAndGet();
+        logger.info("Service '{}' stopped broadcasting on address: {}", serviceInfo.getName(), address);
     }
 
 
@@ -82,6 +71,27 @@ public class ServiceBroadcaster
      */
     int getBroadcastCounter()
     {
-        return this.broadcastingCounter;
+        return broadcastingCounter.get();
+    }
+
+
+    /**
+     * Closes the JmDNS instance and releases any resources associated with it.
+     */
+    void destroy()
+    {
+        broadcastingCounter.set(0);
+        jmdns.unregisterAllServices();
+
+        try
+        {
+            jmdns.close();
+            logger.info("JmDNS instance closed for address: {}", address);
+        }
+
+        catch (IOException ex)
+        {
+            logger.debug("Error while closing JmDNS instance: " + ex.getMessage());
+        }
     }
 }

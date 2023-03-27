@@ -1,10 +1,9 @@
 package MMS.EdgeRouter;
 
-import MMS.EdgeRouter.Exceptions.ServiceRegistrationException;
-import MMS.EdgeRouter.Exceptions.WsEndpointUndeploymentException;
+import MMS.EdgeRouter.Exceptions.*;
 import MMS.EdgeRouter.ServiceBroadcast.ServiceBroadcastManager;
 import MMS.EdgeRouter.ServiceRegistry.EndpointInfo;
-import MMS.EdgeRouter.ServiceRegistry.EndpointRegistry;
+import MMS.EdgeRouter.ServiceRegistry.ServiceRegistry;
 import MMS.EdgeRouter.WsManagement.WsEndpointManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,19 +19,21 @@ public class ServiceManager
     private static final Logger logger = LogManager.getLogger(ServiceManager.class);
     private static ServiceManager instance;
 
-    private final EndpointRegistry endpointRegistry;
+    private final ServiceRegistry serviceRegistry;
     private final ServiceBroadcastManager serviceBroadcastManager;
     private final WsEndpointManager wsEndpointManager;
+
 
     /**
      * Constructs a new {@code ServiceManager} instance.
      */
     private ServiceManager()
     {
-        this.endpointRegistry = new EndpointRegistry();
-        this.serviceBroadcastManager = new ServiceBroadcastManager();
-        this.wsEndpointManager = new WsEndpointManager();
+        this.serviceRegistry = ServiceRegistry.getRegistry();
+        this.serviceBroadcastManager = ServiceBroadcastManager.getManager();
+        this.wsEndpointManager = WsEndpointManager.getManager();
     }
+
 
     /**
      * Retrieves the singleton instance of the {@code ServiceManager} class.
@@ -51,7 +52,6 @@ public class ServiceManager
     }
 
 
-
     /**
      * Adds a new service using the provided {@code EndpointInfo}.
      *
@@ -64,13 +64,13 @@ public class ServiceManager
 
         try
         {
-            endpointRegistry.addEndpoint(endpointInfo);
+            serviceRegistry.addEndpoint(endpointInfo);
         }
 
         catch (ServiceRegistrationException ex)
         {
-            logger.error("Could not start service: " + ex.getMessage());
-            throw new ServiceRegistrationException("Failed to start service: " + serviceName, ex.getCause());
+            logger.error("There was a problem while registering the edge router service: '{}': {}", serviceName, ex.getMessage(), ex);
+            throw new ServiceRegistrationException("Failed to register service: " + serviceName, ex.getCause());
         }
 
         try
@@ -78,25 +78,25 @@ public class ServiceManager
             wsEndpointManager.deployEndpoint(endpointInfo);
         }
 
-        catch (Exception ex)
+        catch (WsEndpointDeploymentException ex)
         {
-            logger.error("Could not deploy endpoint: " + ex.getMessage());
-            endpointRegistry.removeEndpoint(serviceName);
+            logger.error("There was a problem while deploying the edge router service '{}': {}", serviceName, ex.getMessage(), ex);
+            serviceRegistry.removeEndpoint(serviceName);
             throw new ServiceRegistrationException("Failed to deploy endpoint: " + serviceName, ex.getCause());
         }
 
         if (endpointInfo.isPublic())
         {
-            System.out.println("IT WAS PUBLIC");
             try
             {
                 serviceBroadcastManager.broadcastService(endpointInfo);
             }
 
-            catch (Exception ex)
+            catch (ServiceBroadcastException ex)
             {
-                logger.error("Could not broadcast service: " + ex.getMessage());
-                endpointRegistry.removeEndpoint(serviceName);
+                logger.error("There was a problem while registering the service '{}' for broadcast: {}", serviceName, ex.getMessage(), ex);
+                serviceRegistry.removeEndpoint(serviceName);
+
                 try
                 {
                     wsEndpointManager.shutdown(serviceName);
@@ -104,7 +104,7 @@ public class ServiceManager
 
                 catch (WsEndpointUndeploymentException e)
                 {
-                    logger.error("Could not undeploy endpoint: " + e.getMessage());
+                    logger.error("Failed to undeploy service: '{}' after failed broadcast: {}", serviceName, e.getMessage(), ex);
                 }
 
                 throw new ServiceRegistrationException("Failed to broadcast service: " + serviceName, ex.getCause());
@@ -117,49 +117,40 @@ public class ServiceManager
      * Removes the service with the specified service name.
      *
      * @param serviceName the name of the service to be removed
-     * @throws WsEndpointUndeploymentException if the service cannot be undeployed
+     * @throws ServiceUnregistrationException if an error occurs while removing the service
      */
-    public void removeService(String serviceName) throws WsEndpointUndeploymentException
+    public void removeService(String serviceName) throws ServiceUnregistrationException
     {
         try
         {
-            EndpointInfo endpointInfo = endpointRegistry.getEndpointInfo(serviceName);
+            EndpointInfo endpointInfo = serviceRegistry.getEndpointInfo(serviceName);
 
             if (endpointInfo == null)
             {
                 logger.warn("Endpoint not found: " + serviceName);
-                return;
+                throw new NoSuchServiceException("No service with the name " + serviceName + " is registered.");
             }
 
             if (endpointInfo.isPublic())
             {
-                try
-                {
-                    serviceBroadcastManager.stopBroadcastingService(serviceName);
-                }
-                catch (Exception ex)
-                {
-                    logger.error("Could not un-broadcast service: " + ex.getMessage());
-                    throw new WsEndpointUndeploymentException("Failed to un-broadcast service: " + serviceName, ex.getCause());
-                }
+                serviceBroadcastManager.stopBroadcastingService(serviceName);
+                logger.info("Service '{}' un-broadcasted.", serviceName);
             }
 
-            try
-            {
-                wsEndpointManager.shutdown(serviceName);
-            }
-            catch (Exception ex)
-            {
-                logger.error("Could not undeploy endpoint: " + ex.getMessage());
-                throw new WsEndpointUndeploymentException("Failed to undeploy endpoint: " + serviceName, ex.getCause());
-            }
-
-            endpointRegistry.removeEndpoint(serviceName);
+            wsEndpointManager.shutdown(serviceName);
+            serviceRegistry.removeEndpoint(serviceName);
         }
-        catch (Exception ex)
+
+        catch (NoSuchServiceException ex)
         {
-            logger.error("Could not remove endpoint: " + ex.getMessage());
-            throw new WsEndpointUndeploymentException("Failed to remove endpoint: " + serviceName, ex.getCause());
+            logger.error("The service '{}' is not registered.", serviceName);
+            throw new ServiceUnregistrationException("No service with the name " + serviceName + " is registered.", ex.getCause());
+        }
+
+        catch (WsEndpointUndeploymentException e)
+        {
+            logger.error("Failed to undeploy ws endpoint for service '{}': {}", serviceName, e.getMessage(), e);
+            throw new ServiceUnregistrationException("An error occurred when attempting to undeploy the Ws endpoint: " + serviceName, e.getCause());
         }
     }
 
@@ -169,11 +160,11 @@ public class ServiceManager
      */
     public void removeAll()
     {
-        List<EndpointInfo> endpointInfos = endpointRegistry.getEndpoints();
+        List<EndpointInfo> endpointInfos = serviceRegistry.getEndpoints();
 
-        for(EndpointInfo endpointInfo : endpointInfos)
+        for (EndpointInfo endpointInfo : endpointInfos)
         {
-            if(endpointInfo.isPublic())
+            if (endpointInfo.isPublic())
             {
                 serviceBroadcastManager.stopBroadcastingService(endpointInfo.getServiceName());
             }
@@ -185,7 +176,7 @@ public class ServiceManager
 
             catch (WsEndpointUndeploymentException ex)
             {
-                logger.error("Failed to kill server.");
+                logger.info("Failed to undeploy service: '{}' during shutdown: {}", endpointInfo.getServiceName(), ex.getMessage(), ex);
             }
         }
     }
@@ -198,7 +189,7 @@ public class ServiceManager
      */
     public List<EndpointInfo> getAllServices()
     {
-        return endpointRegistry.getEndpoints();
+        return serviceRegistry.getEndpoints();
     }
 
 
@@ -207,8 +198,9 @@ public class ServiceManager
      *
      * @param serviceName the name of the service
      * @return the number of connections for the specified service
+     * @throws NoSuchServiceException if the service does not exist
      */
-    public int getConnections(String serviceName)
+    public int getConnections(String serviceName) throws NoSuchServiceException
     {
         return wsEndpointManager.getConnections(serviceName);
     }

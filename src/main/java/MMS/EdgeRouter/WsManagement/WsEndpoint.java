@@ -1,5 +1,6 @@
 package MMS.EdgeRouter.WsManagement;
 
+import MMS.EdgeRouter.ThreadPoolService;
 import net.maritimeconnectivity.pki.PKIIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -7,28 +8,23 @@ import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 
-import java.util.UUID;
 
 
 /**
  * The {@code WsEndpoint} class extends WebSocketAdapter and provides functionality for
- * handling WebSocket connections, specifically for binary messages that conform
- * to the MMTP specification. It adds the connection to the ConnectionHandler,
- * and handles incoming messages by forwarding them to the MessageHandler.
+ * handling WebSocket events, such as connections and incoming messages.
+ * <p>
+ * It adds and removes sessions from the {@code ConnectionHandler} as they are established
+ * and terminated. It also handles incoming messages by passing them to the {@code MessageHandler}.
+ * <p>
+ * Every callback function runs asynchronously using a thread pool to avoid blocking the thread,
+ * and to allow the ability to handle multiple events at the same time.
  */
 public class WsEndpoint extends WebSocketAdapter
 {
     private static final Logger logger = LogManager.getLogger(WsEndpoint.class);
     private static final ConnectionHandler connectionHandler = ConnectionHandler.getInstance();
-    private static final MessageHandler messageHandler = new MessageHandler();
-    private final String endpointURI;
-
-
-    public WsEndpoint(String endpointURI)
-    {
-        super();
-        this.endpointURI = endpointURI;
-    }
+    private static final MessageHandler messageHandler = MessageHandler.getInstance();
 
 
     /**
@@ -40,17 +36,12 @@ public class WsEndpoint extends WebSocketAdapter
     @Override
     public void onWebSocketConnect(Session session)
     {
-        super.onWebSocketConnect(session);
-
-        connectionHandler.addConnection(session);
-        ConnectionState state = connectionHandler.getConnectionState(session);
-
-        PKIIdentity identity = state.getIdentity();
-
-        if (identity != null)
-            logger.info("WebSocket connection established from " + state.getRemoteAddress() + " to " + endpointURI + " for authenticated user: " + identity.getCn());
-        else
-            logger.info("WebSocket connection established from " + state.getRemoteAddress() + " to " + endpointURI + " for unauthenticated user");
+        ThreadPoolService.executeAsync(() ->
+        {
+            super.onWebSocketConnect(session);
+            logger.info("WebSocket connection established with: {} to {}", session.getRemoteAddress(), session.getUpgradeRequest().getRequestURI());
+            connectionHandler.addConnection(session);
+        });
     }
 
 
@@ -63,10 +54,12 @@ public class WsEndpoint extends WebSocketAdapter
     @Override
     public void onWebSocketText(String message)
     {
-        super.onWebSocketText(message);
-
-        logger.error("Received text message, but this endpoint only accepts binary messages");
-        getSession().close(StatusCode.PROTOCOL, "Message must be a valid binary MMTP message");
+        ThreadPoolService.executeAsync(() ->
+        {
+            super.onWebSocketText(message);
+            logger.warn("Received text message from: {} to {}. Closing connection", getSession().getRemoteAddress(), getSession().getUpgradeRequest().getRequestURI());
+            getSession().close(StatusCode.PROTOCOL, "Text messages are not supported");
+        });
     }
 
 
@@ -81,9 +74,11 @@ public class WsEndpoint extends WebSocketAdapter
     @Override
     public void onWebSocketBinary(byte[] payload, int offset, int len)
     {
-        super.onWebSocketBinary(payload, offset, len);
-
-        messageHandler.handleMessage(payload, offset, len, getSession());
+        ThreadPoolService.executeAsync(() ->
+        {
+            super.onWebSocketBinary(payload, offset, len);
+            messageHandler.handleMessage(payload, offset, len, getSession());
+        });
     }
 
 
@@ -97,10 +92,12 @@ public class WsEndpoint extends WebSocketAdapter
     @Override
     public void onWebSocketClose(int statusCode, String reason)
     {
-        super.onWebSocketClose(statusCode, reason);
-
-        logger.info("Connection closed with status code " + statusCode + " and reason: " + reason);
-        connectionHandler.removeConnection(getSession());
+        ThreadPoolService.executeAsync(() ->
+        {
+            super.onWebSocketClose(statusCode, reason);
+            logger.info("WebSocket connection closed with: {} to {}\nStatus code: {}, Reason {}", getSession().getRemoteAddress(), getSession().getUpgradeRequest().getRequestURI(), statusCode, reason);
+            connectionHandler.removeConnection(getSession());
+        });
     }
 
 
@@ -115,8 +112,10 @@ public class WsEndpoint extends WebSocketAdapter
     @Override
     public void onWebSocketError(Throwable cause)
     {
-        super.onWebSocketError(cause);
-
-        logger.error("WebSocket error: " + cause.getMessage());
+        ThreadPoolService.executeAsync(() ->
+        {
+            super.onWebSocketError(cause);
+            logger.warn("A WebSocket error occurred in the connetcion with: {} to {}", getSession().getRemoteAddress(), getSession().getUpgradeRequest().getRequestURI());
+        });
     }
 }
