@@ -1,7 +1,9 @@
-package MMS.EdgeRouter.Interfaces;
+package MMS.EdgeRouter;
 
-import java.nio.ByteBuffer;
 
+import com.google.protobuf.Message;
+
+import java.util.Set;
 
 /**
  * This interface should be implemented by MMS gateway connections.
@@ -10,7 +12,8 @@ import java.nio.ByteBuffer;
  */
 public interface RemoteConnection
 {
-    void sendMessage(ByteBuffer message);
-    void getStatus();
-    void close();
+    void send(Message message);
+    void addSubscriptions(Set<String> subjects, Set<String> MRNs);
+    void removeSubscriptions(Set<String> subjects, Set<String> MRNs);
+    void shutdown();
 }

@@ -1,8 +1,6 @@
-package MMS.EdgeRouter.SubscriptionManager;
+package MMS.EdgeRouter;
 
 
-import MMS.EdgeRouter.WsManagement.ConnectionHandler;
-import MMS.EdgeRouter.WsManagement.ConnectionState;
 import net.maritimeconnectivity.pki.PKIIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,10 +21,9 @@ public class SubscriptionManager
     private static final Comparator<Session> sessionComparator = Comparator.comparing(Session::hashCode);
     private static SubscriptionManager instance;
 
-    private final ConcurrentHashMap<String, Set<Session>> subscriptions;
-    private final ConcurrentHashMap<String, Set<Session>> wantsDirectMessages;
-
-    private final ConnectionHandler connectionHandler;
+    private final ConcurrentHashMap<String, Set<Session>> subscriptions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Set<Session>> wantsDirectMessages = new ConcurrentHashMap<>();
+    private final ConnectionHandler connectionHandler = ConnectionHandler.getHandler();
 
 
     /**
@@ -35,10 +32,7 @@ public class SubscriptionManager
      */
     private SubscriptionManager()
     {
-        subscriptions = new ConcurrentHashMap<>();
-        wantsDirectMessages = new ConcurrentHashMap<>();
-        connectionHandler = ConnectionHandler.getInstance();
-        logger.info("SubscriptionManager initialized");
+        logger.info("Subscription Manager Initialized");
     }
 
 
@@ -65,22 +59,24 @@ public class SubscriptionManager
      */
     public void addSubscription(List<String> subjects, Session subscriber)
     {
-        ConnectionState state = connectionHandler.getConnectionState(subscriber);
-
-        for (String s : subjects)
+        ThreadPoolService.executeAsync(() ->
         {
-            if (s.length() > 100 || s.length() < 1)
-                continue;
+            AgentConnection connection = connectionHandler.getConnectionState(subscriber);
+            for (String s : subjects)
+            {
+                if (s.length() > 100 || s.length() < 1)
+                    continue;
 
-            subscriptions.putIfAbsent(s, new ConcurrentSkipListSet<>(sessionComparator));
-            boolean subscribed = subscriptions.get(s).add(subscriber);
+                subscriptions.putIfAbsent(s, new ConcurrentSkipListSet<>(sessionComparator));
+                boolean subscribed = subscriptions.get(s).add(subscriber);
 
-            if (subscribed)
-                logger.info("Added subscription for subject {} for Agent ID: {}", s, state.getAgentId());
+                if (subscribed)
+                    logger.info("Added subscription for subject {} for Agent ID: {}", s, connection.getAgentId());
 
-            else
-                logger.info("Subscription already exists for subject {} for Agent ID: {}", s, state.getAgentId());
-        }
+                else
+                    logger.info("Subscription already exists for subject {} for Agent ID: {}", s, connection.getAgentId());
+            }
+        }, TaskPriority.MEDIUM);
     }
 
 
@@ -92,17 +88,20 @@ public class SubscriptionManager
      */
     public void removeSubscription(List<String> subjects, Session subscriber)
     {
-        ConnectionState state = connectionHandler.getConnectionState(subscriber);
-        for (String s : subjects)
+        ThreadPoolService.executeAsync(() ->
         {
-            boolean unsubscribed = subscriptions.get(s).remove(subscriber);
+            AgentConnection connection = connectionHandler.getConnectionState(subscriber);
+            for (String s : subjects)
+            {
+                boolean unsubscribed = subscriptions.get(s).remove(subscriber);
 
-            if (unsubscribed)
-                logger.info("Subscription removed for subject '{}' by agent with ID '{}'", s, state.getAgentId());
+                if (unsubscribed)
+                    logger.info("Subscription removed for subject '{}' by agent with ID '{}'", s, connection.getAgentId());
 
-            else
-                logger.info("Subscription not found for subject '{}' by agent with ID '{}'", s, state.getAgentId());
-        }
+                else
+                    logger.info("Subscription not found for subject '{}' by agent with ID '{}'", s, connection.getAgentId());
+            }
+        }, TaskPriority.MEDIUM);
     }
 
 
@@ -115,27 +114,30 @@ public class SubscriptionManager
      */
     public void addDirectMessageSubscription(Session session)
     {
-        ConnectionState state = connectionHandler.getConnectionState(session);
-        PKIIdentity identity = state.getIdentity();
-
-        if (identity == null)
+        ThreadPoolService.executeAsync(() ->
         {
-            logger.error("An agent tried to subscribe to direct messages without authentication.");
-            session.close(StatusCode.POLICY_VIOLATION, "Agent tried to subscribe to direct messages without authentication.");
-        }
+            AgentConnection connection = connectionHandler.getConnectionState(session);
+            PKIIdentity identity = connection.getIdentity();
 
-        else
-        {
-            String MRN = identity.getMrn();
-            wantsDirectMessages.putIfAbsent(MRN, new ConcurrentSkipListSet<>(sessionComparator));
-            boolean subscribed = wantsDirectMessages.get(MRN).add(session);
-
-            if (subscribed)
-                logger.info("Added direct message subscription for MRN: {} for Agent ID: {}", MRN, state.getAgentId());
+            if (identity == null)
+            {
+                logger.error("An agent tried to subscribe to direct messages without authentication.");
+                session.close(StatusCode.POLICY_VIOLATION, "Agent tried to subscribe to direct messages without authentication.");
+            }
 
             else
-                logger.info("Direct message subscription already exists for MRN: {} for Agent ID: {}", MRN, state.getAgentId());
-        }
+            {
+                String MRN = identity.getMrn();
+                wantsDirectMessages.putIfAbsent(MRN, new ConcurrentSkipListSet<>(sessionComparator));
+                boolean subscribed = wantsDirectMessages.get(MRN).add(session);
+
+                if (subscribed)
+                    logger.info("Added direct message subscription for MRN: {} for Agent ID: {}", MRN, connection.getAgentId());
+
+                else
+                    logger.info("Direct message subscription already exists for MRN: {} for Agent ID: {}", MRN, connection.getAgentId());
+            }
+        }, TaskPriority.MEDIUM);
     }
 
 
@@ -148,20 +150,23 @@ public class SubscriptionManager
      */
     public void removeDirectMessageSubscription(Session session)
     {
-        ConnectionState state = connectionHandler.getConnectionState(session);
-        PKIIdentity identity = state.getIdentity();
-
-        if(!(identity == null))
+        ThreadPoolService.executeAsync(() ->
         {
-            String MRN = identity.getMrn();
-            boolean unsubscribed = wantsDirectMessages.get(MRN).remove(session);
+            AgentConnection connection = connectionHandler.getConnectionState(session);
+            PKIIdentity identity = connection.getIdentity();
 
-            if (unsubscribed)
-                logger.info("Direct message subscription removed for MRN: {} by agent with ID '{}'", MRN, state.getAgentId());
+            if (!(identity == null))
+            {
+                String MRN = identity.getMrn();
+                boolean unsubscribed = wantsDirectMessages.get(MRN).remove(session);
 
-            else
-                logger.info("Direct message subscription not found for MRN: {} by agent with ID '{}'", MRN, state.getAgentId());
-        }
+                if (unsubscribed)
+                    logger.info("Direct message subscription removed for MRN: {} by agent with ID '{}'", MRN, connection.getAgentId());
+
+                else
+                    logger.info("Direct message subscription not found for MRN: {} by agent with ID '{}'", MRN, connection.getAgentId());
+            }
+        }, TaskPriority.MEDIUM);
     }
 
 
@@ -190,11 +195,14 @@ public class SubscriptionManager
      */
     public void removeSession(Session session)
     {
-        for (String subject : subscriptions.keySet())
-            subscriptions.get(subject).remove(session);
+        ThreadPoolService.executeAsync(() ->
+        {
+            for (String subject : subscriptions.keySet())
+                subscriptions.get(subject).remove(session);
 
-        for (String MRN : wantsDirectMessages.keySet())
-            wantsDirectMessages.get(MRN).remove(session);
+            for (String MRN : wantsDirectMessages.keySet())
+                wantsDirectMessages.get(MRN).remove(session);
+        }, TaskPriority.MEDIUM);
     }
 
 
@@ -207,6 +215,12 @@ public class SubscriptionManager
     public Set<Session> getSubscribers(String subject)
     {
         return new HashSet<>(subscriptions.get(subject));
+    }
+
+
+    public Set<Session> getMRNSubscribers(String MRN)
+    {
+        return new HashSet<>(wantsDirectMessages.get(MRN));
     }
 
 
@@ -240,6 +254,7 @@ public class SubscriptionManager
     public Map<String, Integer> getSubscriptionNumbers()
     {
         HashMap<String, Integer> subscriptionNumbers = new HashMap<>();
+
         for (String subject : subscriptions.keySet())
         {
             subscriptionNumbers.put(subject, subscriptions.get(subject).size());
@@ -256,6 +271,7 @@ public class SubscriptionManager
     public HashMap<String, Integer> getDirectMessageSubscriptionNumbers()
     {
         HashMap<String, Integer> subscriptionNumbers = new HashMap<>();
+
         for (String MRN : wantsDirectMessages.keySet())
         {
             subscriptionNumbers.put(MRN, wantsDirectMessages.get(MRN).size());

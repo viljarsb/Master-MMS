@@ -53,6 +53,9 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.9.3'
     implementation 'org.apache.activemq:activemq-all:5.16.3'
 
+    implementation 'org.apache.activemq:activemq-broker:5.16.3'
+    implementation 'org.apache.activemq:activemq-client:5.16.3'
+
 
 }
 

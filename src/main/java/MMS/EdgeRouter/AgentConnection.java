@@ -1,4 +1,4 @@
-package MMS.EdgeRouter.WsManagement;
+package MMS.EdgeRouter;
 
 import net.maritimeconnectivity.pki.CertificateHandler;
 import net.maritimeconnectivity.pki.PKIIdentity;
@@ -12,11 +12,11 @@ import java.util.UUID;
 
 
 /**
- * The {@code ConnectionState} class represents the state of a WebSocket connection.
+ * The {@code AgentConnection} class represents the state of a WebSocket connection.
  * It holds information about the session, the URI the connection was made to,
  * and the MCP-PKI identity of the connected user if available.
  */
-public class ConnectionState
+public class AgentConnection
 {
     private final Session session;
     private PKIIdentity identity;
@@ -25,11 +25,11 @@ public class ConnectionState
 
 
     /**
-     * Constructs a new {@code ConnectionState} object for a given session.
+     * Constructs a new {@code AgentConnection} object for a given session.
      *
-     * @param session the WebSocket session for which the {@code ConnectionState} is created
+     * @param session the WebSocket session for which the {@code AgentConnection} is created
      */
-    public ConnectionState(Session session)
+    public AgentConnection(Session session)
     {
         this.session = session;
         this.connectionURI = session.getUpgradeRequest().getRequestURI();
@@ -81,7 +81,7 @@ public class ConnectionState
 
 
     /**
-     * Returns the WebSocket session associated with the {@code ConnectionState}.
+     * Returns the WebSocket session associated with the {@code AgentConnection}.
      *
      * @return the WebSocket session
      */

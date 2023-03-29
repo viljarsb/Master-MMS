@@ -1,9 +1,6 @@
-package MMS.EdgeRouter.WsManagement;
+package MMS.EdgeRouter;
 
 import MMS.Client.Exceptions.MMTPValidationException;
-import MMS.EdgeRouter.MessageForwarding.MessageForwardingEngine;
-import MMS.EdgeRouter.SubscriptionManager.SubscriptionManager;
-import MMS.EdgeRouter.ThreadPoolService;
 import MMS.Protocols.MMTP.MessageFormats.*;
 import MMS.Protocols.MMTP.Validators.MMTPValidator;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -12,6 +9,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.StatusCode;
+
 
 import java.util.List;
 
@@ -27,8 +25,9 @@ public class MessageHandler
     private static MessageHandler instance = new MessageHandler();
 
     private final SubscriptionManager subscriptionManager = SubscriptionManager.getInstance();
-    private final MessageForwardingEngine messageForwardingEngine = MessageForwardingEngine.getInstance();
-    private final ConnectionHandler connectionHandler = ConnectionHandler.getInstance();
+    private final MessageForwardingEngine messageForwardingEngine = MessageForwardingEngine.getForwarder();
+    private final ConnectionHandler connectionHandler = ConnectionHandler.getHandler();
+    private final UsageMonitor usageMonitor = UsageMonitor.getMonitor();
 
 
     /**
@@ -36,7 +35,7 @@ public class MessageHandler
      */
     private MessageHandler()
     {
-        logger.info("Message handler created");
+        logger.info("Message Handler Initialized");
     }
 
 
@@ -45,7 +44,7 @@ public class MessageHandler
      *
      * @return the singleton instance of the {@code MessageHandler}
      */
-    public synchronized static MessageHandler getInstance()
+    public synchronized static MessageHandler getHandler()
     {
         if (instance == null)
             instance = new MessageHandler();
@@ -66,7 +65,7 @@ public class MessageHandler
      */
     public void handleMessage(byte[] payload, int offset, int len, Session session)
     {
-        ThreadPoolService.executeAsync(() -> processMessage(payload, offset, len, session));
+        ThreadPoolService.executeAsync(() -> processMessage(payload, offset, len, session), TaskPriority.CRITICAL);
     }
 
 
@@ -84,7 +83,8 @@ public class MessageHandler
         byte[] message = new byte[len];
         System.arraycopy(payload, offset, message, 0, len);
 
-        ConnectionState state = connectionHandler.getConnectionState(session);
+        AgentConnection connection = connectionHandler.getConnectionState(session);
+        usageMonitor.addBytesReceived(connection.getAgentId(), len);
 
         try
         {
@@ -94,22 +94,22 @@ public class MessageHandler
 
             switch (messageType)
             {
-                case DIRECT_APPLICATION_MESSAGE, SUBJECT_CAST_APPLICATION_MESSAGE -> processApplicationMessage(messageType, content, state);
-                case REGISTER, UNREGISTER -> processRegistrationMessage(messageType, content, state);
-                case UNRECOGNIZED -> handleUnrecognizedMessage(state);
+                case DIRECT_APPLICATION_MESSAGE, SUBJECT_CAST_APPLICATION_MESSAGE -> processApplicationMessage(messageType, content, connection);
+                case REGISTER, UNREGISTER -> processRegistrationMessage(messageType, content, connection);
+                case UNRECOGNIZED -> handleUnrecognizedMessage(connection);
             }
         }
 
         catch (InvalidProtocolBufferException ex)
         {
-            logger.warn("Agent ID = {}: Received invalid protocol buffer, closing session. Reason: {}", state.getAgentId(), ex.getMessage());
-            state.getSession().close(StatusCode.PROTOCOL, "Sent invalid protocol buffer");
+            logger.warn("Agent ID = {}: Received invalid protocol buffer, closing session. Reason: {}", connection.getAgentId(), ex.getMessage());
+            connection.getSession().close(StatusCode.PROTOCOL, "Sent invalid protocol buffer");
         }
 
         catch (MMTPValidationException e)
         {
-            logger.warn("Agent ID = {}: Received invalid message according to MMTP specification, closing session. Reason: {}", state.getAgentId(), e.getMessage());
-            state.getSession().close(StatusCode.PROTOCOL, "Sent invalid message according to MMTP specification");
+            logger.warn("Agent ID = {}: Received invalid message according to MMTP specification, closing session. Reason: {}", connection.getAgentId(), e.getMessage());
+            connection.getSession().close(StatusCode.PROTOCOL, "Sent invalid message according to MMTP specification");
         }
     }
 
@@ -124,25 +124,26 @@ public class MessageHandler
      * @throws InvalidProtocolBufferException if the message content cannot be parsed as a valid protobuf message
      * @throws MMTPValidationException        if the message fails validation according to MMTP rules
      */
-    private void processApplicationMessage(MessageType type, byte[] content, ConnectionState state) throws InvalidProtocolBufferException, MMTPValidationException
+    private void processApplicationMessage(MessageType type, byte[] content, AgentConnection connection) throws InvalidProtocolBufferException, MMTPValidationException
     {
-        PKIIdentity identity = state.getIdentity();
+        PKIIdentity identity = connection.getIdentity();
 
         if (identity == null)
         {
-            logger.warn("Agent ID = {}: Received application message from unauthenticated session, closing session", state.getAgentId());
-            state.getSession().close(StatusCode.POLICY_VIOLATION, "Attempted to send application message from unauthenticated session");
+            logger.warn("Agent ID = {}: Received application message from unauthenticated session, closing session", connection.getAgentId());
+            connection.getSession().close(StatusCode.POLICY_VIOLATION, "Attempted to send application message from unauthenticated session");
             return;
         }
 
         switch (type)
         {
-            case DIRECT_APPLICATION_MESSAGE -> processDirectApplicationMessage(content, state);
-            case SUBJECT_CAST_APPLICATION_MESSAGE -> processSubjectCastApplicationMessage(content, state);
+            case DIRECT_APPLICATION_MESSAGE -> processDirectApplicationMessage(content, connection);
+            case SUBJECT_CAST_APPLICATION_MESSAGE -> processSubjectCastApplicationMessage(content, connection);
             default ->
             {
-                logger.warn("Agent ID = {}: Received unrecognized application message, closing session", state.getAgentId());
-                state.getSession().close(StatusCode.PROTOCOL, "Sent unrecognized application message");
+
+                logger.warn("Agent ID = {}: Received unrecognized application message, closing session", connection.getAgentId());
+                connection.getSession().close(StatusCode.PROTOCOL, "Sent unrecognized application message");
             }
         }
     }
@@ -156,20 +157,20 @@ public class MessageHandler
      * @throws InvalidProtocolBufferException if the message content cannot be parsed as a valid protobuf message
      * @throws MMTPValidationException        if the message fails validation according to MMTPValidator rules
      */
-    private void processDirectApplicationMessage(byte[] content, ConnectionState state) throws InvalidProtocolBufferException, MMTPValidationException
+    private void processDirectApplicationMessage(byte[] content, AgentConnection connection) throws InvalidProtocolBufferException, MMTPValidationException
     {
-        logger.debug("Agent ID = {}: Received direct application message", state.getAgentId());
+        logger.debug("Agent ID = {}: Received direct application message", connection.getAgentId());
 
         DirectApplicationMessage directApplicationMessage = DirectApplicationMessage.parseFrom(content);
         MMTPValidator.validate(directApplicationMessage);
 
-        String sender = state.getIdentity().getMrn();
+        String sender = connection.getIdentity().getMrn();
         String presentSender = directApplicationMessage.getSender();
 
         if (!sender.equals(presentSender))
         {
-            logger.warn("Agent ID = {}: Received direct application message with different identity, closing session", state.getAgentId());
-            state.getSession().close(StatusCode.POLICY_VIOLATION, "Attempted to send direct application message with different identity");
+            logger.warn("Agent ID = {}: Received direct application message with different identity, closing session", connection.getAgentId());
+            connection.getSession().close(StatusCode.POLICY_VIOLATION, "Attempted to send direct application message with different identity");
             return;
         }
 
@@ -185,20 +186,20 @@ public class MessageHandler
      * @throws InvalidProtocolBufferException if the message content cannot be parsed as a valid protobuf message
      * @throws MMTPValidationException        if the message fails validation according to MMTPValidator rules
      */
-    private void processSubjectCastApplicationMessage(byte[] content, ConnectionState state) throws InvalidProtocolBufferException, MMTPValidationException
+    private void processSubjectCastApplicationMessage(byte[] content, AgentConnection connection) throws InvalidProtocolBufferException, MMTPValidationException
     {
-        logger.debug("Agent ID = {}: Received subject-cast application message", state.getAgentId());
+        logger.debug("Agent ID = {}: Received subject-cast application message", connection.getAgentId());
 
         SubjectCastApplicationMessage subjectCastApplicationMessage = SubjectCastApplicationMessage.parseFrom(content);
         MMTPValidator.validate(subjectCastApplicationMessage);
 
-        String sender = state.getIdentity().getMrn();
+        String sender = connection.getIdentity().getMrn();
         String presentSender = subjectCastApplicationMessage.getSender();
 
         if (!sender.equals(presentSender))
         {
-            logger.warn("Agent ID = {}: Received subject-cast application message with different identity, closing session", state.getAgentId());
-            state.getSession().close(StatusCode.POLICY_VIOLATION, "Attempted to send subject-cast application message with different identity");
+            logger.warn("Agent ID = {}: Received subject-cast application message with different identity, closing session", connection.getAgentId());
+            connection.getSession().close(StatusCode.POLICY_VIOLATION, "Attempted to send subject-cast application message with different identity");
             return;
         }
 
@@ -214,12 +215,12 @@ public class MessageHandler
      * @throws InvalidProtocolBufferException if the message content cannot be parsed as a valid protobuf message
      * @throws MMTPValidationException        if the message fails validation according to MMTPValidator rules
      */
-    private void processRegistrationMessage(MessageType type, byte[] content, ConnectionState state) throws InvalidProtocolBufferException, MMTPValidationException
+    private void processRegistrationMessage(MessageType type, byte[] content, AgentConnection connection) throws InvalidProtocolBufferException, MMTPValidationException
     {
         switch (type)
         {
-            case REGISTER -> processRegisterMessage(content, state);
-            case UNREGISTER -> processUnregisterMessage(content, state);
+            case REGISTER -> processRegisterMessage(content, connection);
+            case UNREGISTER -> processUnregisterMessage(content, connection);
         }
     }
 
@@ -232,18 +233,18 @@ public class MessageHandler
      * @throws InvalidProtocolBufferException if the message content cannot be parsed as a valid protobuf message
      * @throws MMTPValidationException        if the message fails validation according to MMTPValidator rules
      */
-    private void processRegisterMessage(byte[] content, ConnectionState state) throws InvalidProtocolBufferException, MMTPValidationException
+    private void processRegisterMessage(byte[] content, AgentConnection connection) throws InvalidProtocolBufferException, MMTPValidationException
     {
-        logger.debug("Agent ID = {}: Received register message", state.getAgentId());
+        logger.debug("Agent ID = {}: Received register message", connection.getAgentId());
         Register register = Register.parseFrom(content);
         MMTPValidator.validate(register);
 
         List<String> subjects = register.getInterestsList();
-        subscriptionManager.addSubscription(subjects, state.getSession());
+        subscriptionManager.addSubscription(subjects, connection.getSession());
 
         if (register.hasWantDirectMessages())
         {
-            subscriptionManager.addDirectMessageSubscription(state.getSession());
+            subscriptionManager.addDirectMessageSubscription(connection.getSession());
         }
     }
 
@@ -256,18 +257,18 @@ public class MessageHandler
      * @throws InvalidProtocolBufferException if the message content cannot be parsed as a valid protobuf message
      * @throws MMTPValidationException        if the message fails validation according to MMTPValidator rules
      */
-    private void processUnregisterMessage(byte[] content, ConnectionState state) throws InvalidProtocolBufferException, MMTPValidationException
+    private void processUnregisterMessage(byte[] content, AgentConnection connection) throws InvalidProtocolBufferException, MMTPValidationException
     {
-        logger.debug("Agent ID = {}: Received unregister message", state.getAgentId());
+        logger.debug("Agent ID = {}: Received unregister message", connection.getAgentId());
         Unregister unregister = Unregister.parseFrom(content);
         MMTPValidator.validate(unregister);
 
         List<String> subjects = unregister.getInterestsList();
-        subscriptionManager.removeSubscription(subjects, state.getSession());
+        subscriptionManager.removeSubscription(subjects, connection.getSession());
 
         if (unregister.hasWantDirectMessages())
         {
-            subscriptionManager.removeDirectMessageSubscription(state.getSession());
+            subscriptionManager.removeDirectMessageSubscription(connection.getSession());
         }
     }
 
@@ -278,9 +279,9 @@ public class MessageHandler
      *
      * @param state the ConnectionState associated with the WebSocket session
      */
-    private void handleUnrecognizedMessage(ConnectionState state)
+    private void handleUnrecognizedMessage(AgentConnection connection)
     {
-        logger.warn("Received unrecognized message, that does not conform to the MMTP specification, from Agent ID = " + state.getAgentId() + " , closing session");
-        state.getSession().close(StatusCode.PROTOCOL, "Received unrecognized message, that does not conform to the MMTP specification");
+        logger.warn("Received unrecognized message, that does not conform to the MMTP specification, from Agent ID = " + connection.getAgentId() + " , closing session");
+        connection.getSession().close(StatusCode.PROTOCOL, "Received unrecognized message, that does not conform to the MMTP specification");
     }
 }

@@ -1,7 +1,4 @@
-package MMS.EdgeRouter.Interfaces;
-
-
-import MMS.EdgeRouter.MessageForwarding.ConnectionStatus;
+package MMS.EdgeRouter;
 
 import java.nio.ByteBuffer;
 
