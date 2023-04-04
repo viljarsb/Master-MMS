@@ -17,7 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * MessageHandler is responsible for processing incoming messages and
+ * WsMessageHandler is responsible for processing incoming messages and
  * notifying the appropriate MessageListener. It uses a thread pool
  * to process messages in parallel.
  */
@@ -30,7 +30,7 @@ public class MessageHandler
 
 
     /**
-     * Constructs a new MessageHandler with the specified MessageListener.
+     * Constructs a new WsMessageHandler with the specified MessageListener.
      *
      * @param messageListener the listener for handling message events
      */

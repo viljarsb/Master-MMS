@@ -86,7 +86,7 @@ public class WsEndpoint extends WebSocketAdapter
 
 
     /**
-     * Called when a WebSocket receives a binary message. Processes the message using the MessageHandler.
+     * Called when a WebSocket receives a binary message. Processes the message using the WsMessageHandler.
      *
      * @param payload the binary payload of the message
      * @param offset  the starting position of the payload

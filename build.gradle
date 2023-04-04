@@ -11,6 +11,7 @@ repositories {
     maven { url "https://dl.cloudsmith.io/public/libp2p/jvm-libp2p/maven/" }
 }
 
+
 dependencies {
     implementation 'org.jetbrains:annotations:23.0.0'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
@@ -56,10 +57,13 @@ dependencies {
     implementation 'org.apache.activemq:activemq-broker:5.16.3'
     implementation 'org.apache.activemq:activemq-client:5.16.3'
 
-
+    compileOnly 'org.projectlombok:lombok:1.18.26'
+    annotationProcessor 'org.projectlombok:lombok:1.18.26'
+    implementation 'org.springframework:spring-aop:5.3.10'
 }
 
 
 test {
     useJUnitPlatform()
 }
+

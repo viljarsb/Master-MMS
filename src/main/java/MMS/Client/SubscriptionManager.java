@@ -27,7 +27,7 @@ public class SubscriptionManager
 
 
     /**
-     * Creates a new SubscriptionManager instance.
+     * Creates a new SubscriptionManagement instance.
      *
      * @param subscribeListener The listener to receive subscription updates.
      */

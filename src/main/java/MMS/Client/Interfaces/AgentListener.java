@@ -20,7 +20,6 @@ public abstract class AgentListener
     public abstract void onConnect(AgentStatus status);
     public abstract void onDisconnect(DisconnectionReason reason);
     public abstract void onHandshakeError(DisconnectionReason reason);
-    protected abstract void onRouterDiscovery(List<RouterInfo> routers);
 
     // Message-related methods
     public abstract void onDirectMessage(String messageId, String sender, Instant expires, byte[] message);
